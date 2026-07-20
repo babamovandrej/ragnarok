@@ -1,2 +1,2 @@
 def test_import_ok():
-    import ragnarok  # noqa: F401
+    import src  # noqa: F401

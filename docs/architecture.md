@@ -20,7 +20,7 @@ Fixed demo/eval repo: **`encode/starlette`**.
 
 ## Pipeline
 
-1. **Ingestion** (`ragnarok/ingestion/`) — shallow-clone the repo via
+1. **Ingestion** (`src/ingestion/`) — shallow-clone the repo via
    `subprocess` git calls, parse source with `tree-sitter`
    (`tree-sitter-language-pack`, launch scope: Python + JavaScript/TypeScript),
    chunk along function/class boundaries so docstrings/signatures stay
@@ -31,19 +31,19 @@ Fixed demo/eval repo: **`encode/starlette`**.
    end_line, symbol_name, symbol_type, language, text, embedding`) for
    pushing to a free HF Dataset repo.
 
-2. **Retrieval** (`ragnarok/retrieval/`) — dense (Chroma) and sparse
+2. **Retrieval** (`src/retrieval/`) — dense (Chroma) and sparse
    (`bm25s`) candidates are fused via Reciprocal Rank Fusion, deduped by
    `chunk_id`, then reranked with `cross-encoder/ms-marco-MiniLM-L-6-v2`
    (pinned revision) before anything reaches the LLM.
 
-3. **Multi-hop agent** (`ragnarok/agent/`) — a LangGraph graph
+3. **Multi-hop agent** (`src/agent/`) — a LangGraph graph
    (`retrieve → decide_more_hops → follow_symbol (max 3 hops) →
    compose_answer`) can issue a follow-up retrieval for a symbol's
    definition in another file. The ordered hop path (file, symbol, line
    range, reason) is recorded as a serializable `HopRecord` list for UI
    visualization.
 
-4. **Generation** (`ragnarok/generation/`) — backend-agnostic
+4. **Generation** (`src/generation/`) — backend-agnostic
    `generate(prompt, max_tokens)` interface with two implementations:
    `zerogpu_backend.py` (`Qwen/Qwen2.5-Coder-7B-Instruct` via
    `@spaces.GPU`) and `cpu_backend.py`
@@ -53,18 +53,18 @@ Fixed demo/eval repo: **`encode/starlette`**.
    surfaces which backend answered. Prompts mandate citing every claim and
    saying "I don't know" when context doesn't support an answer.
 
-5. **Citation verification** (`ragnarok/generation/citations.py`) — every
+5. **Citation verification** (`src/generation/citations.py`) — every
    cited `file#Lstart-Lend` span is parsed out of the model's output and
    checked against the real chunk index before display; unverifiable
    citations are dropped or flagged, never shown as fact.
 
-6. **Comparison mode** (`ragnarok/baseline/`, `ragnarok/ui/compare_view.py`) —
+6. **Comparison mode** (`src/baseline/`, `src/ui/compare_view.py`) —
    a naive baseline (single dense top-k, no BM25/rerank/hops, same LLM)
    runs in parallel with the full RAGnarok pipeline on every query; the
    Gradio UI shows both answers side by side with a verified-citation
    badge on the RAGnarok column only.
 
-7. **Evaluation** (`ragnarok/eval/`) — a hand-labeled 30-50 item Q&A set
+7. **Evaluation** (`src/eval/`) — a hand-labeled 30-50 item Q&A set
    against starlette (single-hop, multi-hop, adversarial "not in this
    repo" items) is scored with RAGAS-style metrics (faithfulness, context
    precision/recall) using our own hosted model as the judge (a
@@ -91,7 +91,7 @@ ragnarok/
 ├── requirements.txt
 ├── app.py                         # HF Space entrypoint — thin Gradio Blocks launcher
 │
-├── ragnarok/
+├── src/
 │   ├── config.py                  # model IDs + pinned revisions, cache paths, caps
 │   ├── ingestion/                 # clone.py, chunker.py, embedder.py, indexer.py, schemas.py
 │   ├── retrieval/                 # dense.py, sparse.py, hybrid.py, rerank.py

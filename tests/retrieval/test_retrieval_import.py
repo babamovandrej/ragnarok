@@ -1,2 +1,2 @@
 def test_import_ok():
-    import ragnarok.retrieval  # noqa: F401
+    import src.retrieval  # noqa: F401

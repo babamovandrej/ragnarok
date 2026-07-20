@@ -7,10 +7,10 @@ stub serves locally.
 
 ## Tasks
 
-1. **Package skeleton** — `ragnarok/` with all subpackages (`ingestion`,
+1. **Package skeleton** — `src/` with all subpackages (`ingestion`,
    `retrieval`, `agent`, `generation`, `baseline`, `eval`, `ui`, `utils`),
    each with `__init__.py`.
-   *Done:* `python -c "import ragnarok"` succeeds from repo root.
+   *Done:* `python -c "import src"` succeeds from repo root.
 
 2. **Packaging config** — `pyproject.toml` (hatchling backend,
    `requires-python = ">=3.11,<3.13"`).

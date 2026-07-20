@@ -35,6 +35,36 @@ artifact is the running Space, not a pip-installable package.
 
 ---
 
+## [Phase 1] Rename the package directory from `ragnarok/` to `src/`
+
+**Decision:** The importable package directory at the repo root is renamed
+`ragnarok/` → `src/` (`git mv ragnarok src`), so the import path is now
+`import src` / `from src.ingestion import ...` etc. This is a rename only
+— the layout is still flat at the repo root (`src/` sits directly beside
+`app.py`, `pyproject.toml`, etc.), so the flat-vs-`src/`-layout reasoning
+in the Phase 0 entry above (no editable-install requirement to import at
+Spaces deploy time) still holds; only the folder's name changed, not its
+position. `pyproject.toml`'s `[tool.hatch.build.targets.wheel] packages`
+now points at `["src"]`; the distribution name in `[project] name` stays
+`"ragnarok"`. The gitignored `.ragnarok_cache/` runtime cache directory is
+a separate, unrelated concept and was left as-is.
+
+**Why:** Explicit user request.
+
+**Alternatives considered:** None — this supersedes the directory name
+chosen in the Phase 0 entry above by explicit instruction; that entry is
+left unedited as the historical record of the flat-vs-nested reasoning,
+which is unaffected by this rename.
+
+**Trade-offs / risks:** The importable name (`src`) no longer matches the
+project's own name (`ragnarok`/RAGnarok), which is less self-descriptive
+than a package literally named after the project — acceptable since this
+was a deliberate, explicit choice rather than a naming default.
+
+**Date/phase:** 2026-07-20, Phase 1.
+
+---
+
 ## [Phase 0] Python 3.11
 
 **Decision:** Target Python `>=3.11,<3.13`.

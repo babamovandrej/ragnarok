@@ -1,2 +1,2 @@
 def test_import_ok():
-    import ragnarok.agent  # noqa: F401
+    import src.agent  # noqa: F401
