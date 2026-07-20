@@ -1,2 +1,2 @@
 def test_import_ok():
-    import ragnarok.eval  # noqa: F401
+    import src.eval  # noqa: F401

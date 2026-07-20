@@ -1,6 +1,6 @@
 import gradio as gr
 
-from ragnarok import __version__
+from src import __version__
 
 with gr.Blocks(title="RAGnarok") as demo:
     gr.Markdown(

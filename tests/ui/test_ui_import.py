@@ -1,2 +1,2 @@
 def test_import_ok():
-    import ragnarok.ui  # noqa: F401
+    import src.ui  # noqa: F401
