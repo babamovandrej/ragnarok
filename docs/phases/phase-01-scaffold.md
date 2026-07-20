@@ -1,7 +1,7 @@
 # Phase 1 — Repo scaffold, dependency setup, empty module stubs
 
-**Status:** Local verification done (tasks 1-4, 6-8); CI push (task 5)
-pending user confirmation to commit/push.
+**Status:** Done. All 8 tasks verified, including a green Actions run on
+the pushed `phase-1-scaffold` branch.
 **Milestone:** package imports cleanly, tests run, CI is green, the app
 stub serves locally.
 
