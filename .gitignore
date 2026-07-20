@@ -216,3 +216,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# RAGnarok local cache: cloned repos + built vector/BM25 indexes
+.ragnarok_cache/
+
+# Staged parquet before push to the HF Dataset repo
+*.parquet
+data/index_staging/
+
+# Downloaded GGUF weights for the CPU fallback model
+models/
+*.gguf
+
+# Gradio runtime artifacts
+flagged/
+gradio_cached_examples/
