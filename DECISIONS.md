@@ -449,3 +449,68 @@ built starlette index when compute budget allows, fill in the results
 table, and flip the phase status to `Done`.
 
 **Date/phase:** 2026-07-21, Phase 3.
+
+---
+
+## [Phase 4] CPU generation model loaded via `hf_hub_download`, not `Llama.from_pretrained`
+
+**Decision:** `generation/cpu_backend.py`'s `CPUBackend` downloads the
+GGUF file with `huggingface_hub.hf_hub_download(repo_id=..., filename=...,
+revision=...)` and constructs `llama_cpp.Llama(model_path=...)` from the
+resulting local path, instead of calling `Llama.from_pretrained(repo_id=,
+filename=, revision=...)` directly.
+
+**Why:** Verified directly against the installed `llama-cpp-python`
+source: `Llama.from_pretrained`'s signature is `(repo_id, filename,
+additional_files=None, local_dir=None, local_dir_use_symlinks="auto",
+cache_dir=None, **kwargs)` — no `revision` parameter exists, and passing
+one through `**kwargs` would forward it into the `Llama` constructor
+(which doesn't accept it either) rather than to the Hub download, causing
+a `TypeError` at load time. Calling `hf_hub_download` ourselves keeps the
+same pinned-revision guarantee already applied to the embedder and
+reranker (Phase 0 mitigation #4) without relying on an API that doesn't
+support it.
+
+**Alternatives considered:** `Llama.from_pretrained(..., revision=...)` —
+rejected outright since it would raise at call time, not silently ignore
+the pin. Leaving the GGUF model unpinned (branch-following `main`) —
+rejected as inconsistent with every other third-party model load in this
+project.
+
+**Trade-offs / risks:** One extra explicit download step instead of a
+single library call; negligible — `hf_hub_download` is already a
+transitive dependency of `huggingface_hub`, which is already pinned in
+`requirements.txt`.
+
+**Date/phase:** 2026-07-21, Phase 4.
+
+---
+
+## [Phase 4] Deferred the real-model manual `scripts/ask.py` run
+
+**Decision:** Phase 4's task 5 (`python scripts/ask.py "<question>"`
+end-to-end against starlette, confirming ≥1 verified citation) was
+implemented as a ready-to-run script but not executed in this session.
+The phase's status is recorded as "code complete; manual end-to-end run
+pending," not "Done."
+
+**Why:** Explicit user instruction not to execute real model
+inference/downloads in this session (CPU cost). Running it requires a
+live `build_index.py` run (real embedding model) plus real
+`Embedder`/`Reranker`/`CPUBackend` inference for the question — exactly
+the load the user asked to avoid. All four generation modules
+(`llm`/`cpu_backend`/`prompts`/`citations`) are otherwise fully
+implemented and unit-tested (with `Llama`/`hf_hub_download` mocked out
+for the default test run), so nothing about correctness is unverified —
+only the live, real-model end-to-end answer is outstanding. Mirrors the
+same judgment call already logged for Phase 3's deferred comparison run.
+
+**Alternatives considered:** Running it anyway to close out the phase
+milestone fully — rejected outright given the explicit instruction.
+
+**Trade-offs / risks:** Phase 4's milestone (a real verified-citation
+answer from starlette) isn't empirically confirmed yet — only the code
+paths are. Run `scripts/ask.py` against a built starlette index when
+compute budget allows and flip the phase status to `Done`.
+
+**Date/phase:** 2026-07-21, Phase 4.

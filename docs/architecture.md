@@ -49,20 +49,26 @@ Fixed demo/eval repo: **`encode/starlette`**.
    range, reason) is recorded as a serializable `HopRecord` list for UI
    visualization.
 
-4. **Generation** (`src/generation/`) — backend-agnostic
-   `generate(prompt, max_tokens)` interface with two implementations:
-   `zerogpu_backend.py` (`Qwen/Qwen2.5-Coder-7B-Instruct` via
-   `@spaces.GPU`) and `cpu_backend.py`
-   (`Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF` via `llama-cpp-python`,
-   installed from the prebuilt CPU wheel index). ZeroGPU quota-exceeded
-   errors are caught and silently fall back to the CPU backend; the UI
-   surfaces which backend answered. Prompts mandate citing every claim and
-   saying "I don't know" when context doesn't support an answer.
+4. **Generation** (`src/generation/`) — `llm.py`'s `LLMBackend` is a
+   `typing.Protocol` (`generate(prompt, max_tokens) -> str`) that every
+   backend satisfies structurally. `cpu_backend.py`'s `CPUBackend` pulls
+   `Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF` (Q4_K_M) at a pinned revision
+   via `huggingface_hub.hf_hub_download` (not `Llama.from_pretrained`,
+   which has no `revision` parameter — see `DECISIONS.md`) and runs it
+   through `llama-cpp-python`, installed from the prebuilt CPU wheel
+   index. `zerogpu_backend.py` (`Qwen/Qwen2.5-Coder-7B-Instruct` via
+   `@spaces.GPU`) is not yet implemented. `prompts.py`'s `render_prompt`
+   renders numbered context chunks with mandatory `file#Lstart-Lend`
+   citation instructions and an explicit "say I don't know" instruction.
+   ZeroGPU quota-exceeded errors will be caught and silently fall back to
+   the CPU backend once the ZeroGPU backend exists; the UI will surface
+   which backend answered.
 
-5. **Citation verification** (`src/generation/citations.py`) — every
-   cited `file#Lstart-Lend` span is parsed out of the model's output and
-   checked against the real chunk index before display; unverifiable
-   citations are dropped or flagged, never shown as fact.
+5. **Citation verification** (`src/generation/citations.py`) —
+   `verify_citations(answer, chunks)` parses every `file#Lstart-Lend` span
+   out of the model's output and marks each one verified only if it falls
+   within some real chunk's file and line range; unverifiable citations
+   are flagged (`Citation.verified = False`), never shown as fact.
 
 6. **Comparison mode** (`src/baseline/`, `src/ui/compare_view.py`) —
    a naive baseline (single dense top-k, no BM25/rerank/hops, same LLM)
