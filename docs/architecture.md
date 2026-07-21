@@ -28,13 +28,19 @@ Fixed demo/eval repo: **`encode/starlette`**.
    (pinned revision, `trust_remote_code=True`), and index into Chroma
    (dense) + `bm25s` (sparse). Chunks/embeddings/metadata are also
    exportable to a fixed parquet schema (`chunk_id, file_path, start_line,
-   end_line, symbol_name, symbol_type, language, text, embedding`) for
+   end_line, symbol_name, qualified_name, symbol_type, language, text,
+   embedding`) for
    pushing to a free HF Dataset repo.
 
-2. **Retrieval** (`src/retrieval/`) — dense (Chroma) and sparse
-   (`bm25s`) candidates are fused via Reciprocal Rank Fusion, deduped by
-   `chunk_id`, then reranked with `cross-encoder/ms-marco-MiniLM-L-6-v2`
-   (pinned revision) before anything reaches the LLM.
+2. **Retrieval** (`src/retrieval/`) — `dense.py` queries the Chroma
+   collection (created with `hnsw:space: cosine`) by embedding, `sparse.py`
+   queries the persisted `bm25s` index and hydrates full chunk data back
+   from Chroma by `chunk_id`, `hybrid.py` fuses both ranked lists via
+   Reciprocal Rank Fusion (deduped by `chunk_id`), and `rerank.py`'s
+   `Reranker` reorders the fused candidates with
+   `cross-encoder/ms-marco-MiniLM-L-6-v2` (pinned revision) before
+   anything reaches the LLM. Every stage returns `list[RetrievedChunk]`
+   (a `Chunk` plus a relevance score, higher-is-better throughout).
 
 3. **Multi-hop agent** (`src/agent/`) — a LangGraph graph
    (`retrieve → decide_more_hops → follow_symbol (max 3 hops) →

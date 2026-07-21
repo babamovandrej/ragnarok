@@ -103,8 +103,9 @@ around it by hand.
 **Trade-offs / risks:** For the HF Dataset interchange format, we do NOT
 rely on Chroma's internal on-disk format (not guaranteed stable across
 versions) — we own a custom parquet schema (`chunk_id, file_path,
-start_line, end_line, symbol_name, symbol_type, language, text,
-embedding`) written via `pyarrow` and rehydrate Chroma from that on load.
+start_line, end_line, symbol_name, qualified_name, symbol_type, language,
+text, embedding`) written via `pyarrow` and rehydrate Chroma from that on
+load.
 
 **Date/phase:** 2026-07-20, Phase 0.
 
@@ -354,3 +355,97 @@ verified-good Linux wheel from the same prebuilt index per the original
 Phase 0 mitigation — no change to that decision.
 
 **Date/phase:** 2026-07-20, Phase 1.
+
+---
+
+## [Phase 2] Chunker language coverage expanded beyond the original launch scope
+
+**Decision:** `ingestion/chunker.py` chunks Python, TypeScript/TSX,
+JavaScript, Go, Rust, Java, C, and C++ along function/class/method
+boundaries, and treats YAML/JSON/TOML as bounded whole-file chunks —
+wider than the Phase 0 "launch scope: Python + JavaScript/TypeScript"
+decision.
+
+**Why:** `tree-sitter-language-pack` already bundles vetted grammars for
+all of these languages (the Phase 0 rationale for adopting it in the
+first place), and once the chunk-boundary/qualified-name logic was
+written generically enough to handle Python and TS/JS correctly, adding
+the node-type mappings for the other languages was incremental rather
+than a new grammar-packaging problem — exactly the expansion path the
+Phase 0 entry anticipated ("Expansion later is purely 'write the node-type
+mapping' for the chunker"). Each language has golden-file tests
+(`tests/ingestion/test_chunker.py`, `tests/fixtures/chunker/`) asserting
+exact line ranges, so correctness wasn't traded away to get the wider
+coverage.
+
+**Alternatives considered:** Staying strictly to Python + TS/JS for Phase
+2 and expanding later — rejected once it became clear the extra languages
+were low-marginal-cost given the shared chunking framework already built.
+
+**Trade-offs / risks:** None significant — this is a superset of the
+original scope, not a substitution; starlette (Python) is unaffected
+either way.
+
+**Date/phase:** 2026-07-21, Phase 2.
+
+---
+
+## [Phase 3] Chroma collection distance space set to cosine
+
+**Decision:** `indexer.py`'s `_build_chroma_collection` now creates the
+collection with `metadata={"hnsw:space": "cosine"}`, instead of Chroma's
+default (`l2`).
+
+**Why:** Phase 3's dense retriever (`retrieval/dense.py`) is specified to
+rank by cosine similarity. Setting the collection's distance space to
+cosine at creation makes Chroma's returned `distance` equal to cosine
+distance, so `score = 1 - distance` is exactly cosine similarity —
+verified directly (identical vectors → distance `0.0`; orthogonal vectors
+→ distance `1.0`). Computing cosine similarity by hand in Python instead
+would have meant bypassing Chroma's own ANN index for every dense query,
+defeating the Phase 0 rationale for using Chroma at all.
+
+**Alternatives considered:** Leaving the default `l2` space and computing
+cosine similarity manually from raw vectors — rejected as unnecessary
+extra code and a bypass of Chroma's indexed search path for no benefit.
+
+**Trade-offs / risks:** This changes the on-disk index format for
+already-built Phase 2 caches (they'd need a rebuild to pick up the new
+space) — no existing deployed index depends on the old default yet, so no
+migration was needed.
+
+**Date/phase:** 2026-07-21, Phase 3.
+
+---
+
+## [Phase 3] Deferred the real-model manual retrieval comparison run
+
+**Decision:** Phase 3's task 5 (8-10 hand-picked starlette queries run
+through dense-only vs. hybrid+rerank, logged in
+`docs/phases/phase-03-retrieval.md`) was implemented as a ready-to-run
+script (`scripts/compare_retrieval.py`) but not executed in this session.
+The phase's status is recorded as "code complete; manual comparison run
+pending," not "Done."
+
+**Why:** Explicit user instruction not to execute real model
+inference/downloads in this session (CPU cost). Running the comparison
+requires a live `build_index.py` run against starlette (clone + real
+embedding model) followed by real `Embedder`/`Reranker` inference for each
+query — exactly the kind of load the user asked to avoid. All four
+retrieval-stage modules (dense/sparse/hybrid/rerank) are otherwise fully
+implemented and unit-tested (with the cross-encoder mocked out for the
+default test run), so nothing about correctness is unverified — only the
+live, real-model comparison table is outstanding.
+
+**Alternatives considered:** Running it anyway to close out the phase
+milestone fully — rejected outright given the explicit instruction; a
+partially-honest "Done" status would misrepresent what was actually
+verified.
+
+**Trade-offs / risks:** Phase 3's milestone ("hybrid+rerank demonstrably
+beats dense-only on sampled queries") isn't empirically confirmed yet —
+only the code paths are. Run `scripts/compare_retrieval.py` against a
+built starlette index when compute budget allows, fill in the results
+table, and flip the phase status to `Done`.
+
+**Date/phase:** 2026-07-21, Phase 3.

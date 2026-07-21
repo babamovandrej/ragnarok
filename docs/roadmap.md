@@ -10,8 +10,8 @@ Fixed demo repo for the running example and Phase 7 eval set: **`encode/starlett
 |---|---|---|---|
 | 0 | (this planning session) | Repo structure, dependencies, phased task list agreed | Done |
 | 1 | [phase-01-scaffold.md](phases/phase-01-scaffold.md) | Package imports, tests run, CI green, app stub serves | Done |
-| 2 | [phase-02-ingestion.md](phases/phase-02-ingestion.md) | Chunker → embedder → indexer works offline on starlette | Not started |
-| 3 | [phase-03-retrieval.md](phases/phase-03-retrieval.md) | Hybrid retrieval + rerank beats dense-only on sampled queries | Not started |
+| 2 | [phase-02-ingestion.md](phases/phase-02-ingestion.md) | Chunker → embedder → indexer works offline on starlette | Done |
+| 3 | [phase-03-retrieval.md](phases/phase-03-retrieval.md) | Hybrid retrieval + rerank beats dense-only on sampled queries | Code complete — manual comparison pending |
 | 4 | [phase-04-generation.md](phases/phase-04-generation.md) | Single-hop generation + citation verification, CPU backend | Not started |
 | 5 | [phase-05-agent.md](phases/phase-05-agent.md) | LangGraph multi-hop agent with tracked hop path | Not started |
 | 6 | [phase-06-comparison.md](phases/phase-06-comparison.md) | Naive-vs-RAGnarok side-by-side comparison UI | Not started |

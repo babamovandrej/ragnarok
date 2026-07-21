@@ -135,7 +135,7 @@ def _build_chroma_collection(
 ) -> None:
     """Create a fresh Chroma collection at chroma_dir populated with the given chunks/embeddings."""
     client = chromadb.PersistentClient(path=str(chroma_dir))
-    collection = client.create_collection(COLLECTION_NAME)
+    collection = client.create_collection(COLLECTION_NAME, metadata={"hnsw:space": "cosine"})
     collection.add(
         ids=[chunk.chunk_id for chunk in chunks],
         embeddings=embeddings.tolist(),
