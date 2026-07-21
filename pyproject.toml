@@ -16,10 +16,15 @@ packages = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: hits the network / downloads real models or repos; excluded by default, run with -m integration",
+]
+addopts = "-m 'not integration'"
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = ["tests/fixtures"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
