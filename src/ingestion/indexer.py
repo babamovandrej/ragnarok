@@ -4,12 +4,13 @@ import os
 import shutil
 import tempfile
 import time
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
 import bm25s
 import chromadb
 import numpy as np
 
-from dataclasses import asdict, dataclass
-from pathlib import Path
 from src.config import EMBEDDING_MODEL_ID, EMBEDDING_MODEL_REVISION, INDEX_SCHEMA_VERSION
 from src.ingestion.schemas import Chunk
 

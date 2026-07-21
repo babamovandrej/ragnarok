@@ -5,9 +5,9 @@ import shutil
 import sys
 import tempfile
 import time
-
 from dataclasses import dataclass
 from pathlib import Path
+
 from src.config import CACHE_ROOT, INDEX_SCHEMA_VERSION
 from src.ingestion.chunker import collect_chunks
 from src.ingestion.clone import (

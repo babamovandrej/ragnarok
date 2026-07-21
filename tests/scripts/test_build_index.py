@@ -2,13 +2,12 @@ import argparse
 import json
 import shutil
 import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+
 import numpy as np
 import pytest
 
-from dataclasses import dataclass
-from pathlib import Path
-from src.ingestion.clone import GitCommandError
-from src.ingestion.schemas import IngestionStats
 from scripts.build_index import (
     EXIT_CLONE_FAILED,
     EXIT_INCOMPATIBLE_CACHE,
@@ -32,6 +31,9 @@ from scripts.build_index import (
     main,
     render_result,
 )
+from src.ingestion.clone import GitCommandError
+from src.ingestion.schemas import IngestionStats
+
 
 class _FakeEmbedder:
     def __init__(self, device=None, batch_size=None):

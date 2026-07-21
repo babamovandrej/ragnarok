@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from tree_sitter_language_pack import SupportedLanguage
 
 CACHE_ROOT = Path(".ragnarok_cache")

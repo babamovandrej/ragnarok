@@ -3,6 +3,7 @@ import pytest
 
 from src.ingestion.embedder import Embedder
 
+
 @pytest.mark.integration
 def test_embed_returns_correct_shape_with_no_nans():
     embedder = Embedder()

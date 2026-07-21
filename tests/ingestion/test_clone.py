@@ -1,8 +1,9 @@
 import os
 import subprocess
+from pathlib import Path
+
 import pytest
 
-from pathlib import Path
 from src.ingestion.clone import (
     ChangedFile,
     GitCommandError,

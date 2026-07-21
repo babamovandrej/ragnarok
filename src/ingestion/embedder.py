@@ -1,8 +1,9 @@
 import logging
 import time
-import numpy as np
 
+import numpy as np
 from sentence_transformers import SentenceTransformer
+
 from src.config import (
     EMBEDDING_BATCH_SIZE,
     EMBEDDING_MAX_SEQ_LENGTH,

@@ -4,9 +4,9 @@ import re
 import shutil
 import subprocess
 import time
-
 from dataclasses import dataclass
 from pathlib import Path
+
 from src.config import CLONE_TIMEOUT_SECONDS, GIT_COMMAND_TIMEOUT_SECONDS
 
 logger = logging.getLogger(__name__)

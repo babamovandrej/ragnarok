@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Literal
+
 from tree_sitter_language_pack import SupportedLanguage
 
 SymbolType = Literal["function", "method", "class", "interface", "struct", "type", "file"]

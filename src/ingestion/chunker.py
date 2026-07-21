@@ -1,13 +1,13 @@
 import hashlib
 import logging
 import os
-
 from collections.abc import Iterator, Mapping
 from dataclasses import replace
 from pathlib import Path
+
 from tree_sitter import Node
 from tree_sitter_language_pack import SupportedLanguage, get_parser
-from src.ingestion.schemas import Chunk, IngestionStats, SymbolType
+
 from src.config import (
     EXCLUDED_DIRECTORY_NAMES,
     LANGUAGE_BY_EXTENSION,
@@ -19,6 +19,7 @@ from src.config import (
     SOURCE_EXTENSIONS,
     WHOLE_FILE_LANGUAGES,
 )
+from src.ingestion.schemas import Chunk, IngestionStats, SymbolType
 
 logger = logging.getLogger(__name__)
 

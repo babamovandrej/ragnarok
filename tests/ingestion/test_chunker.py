@@ -1,6 +1,7 @@
+from pathlib import Path
+
 import pytest
 
-from pathlib import Path
 from src.ingestion.chunker import chunk_file, chunk_source, collect_chunks
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "chunker"

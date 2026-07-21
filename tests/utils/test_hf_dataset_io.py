@@ -4,6 +4,7 @@ import pyarrow.parquet as pq
 from src.ingestion.schemas import Chunk
 from src.utils.hf_dataset_io import export_chunks_to_parquet
 
+
 def test_export_chunks_to_parquet_has_expected_columns(tmp_path):
     chunks = [
         Chunk(

@@ -1,9 +1,10 @@
+from pathlib import Path
+
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
-
-from pathlib import Path
 from huggingface_hub import HfApi
+
 from src.ingestion.schemas import Chunk
 
 

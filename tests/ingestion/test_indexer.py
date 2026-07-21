@@ -1,12 +1,12 @@
 import json
+from unittest.mock import patch
+
 import chromadb.errors
 import numpy as np
 import pytest
-
-from unittest.mock import patch
 from tree_sitter_language_pack import SupportedLanguage
+
 from src.config import EMBEDDING_MODEL_ID, EMBEDDING_MODEL_REVISION, INDEX_SCHEMA_VERSION
-from src.ingestion.schemas import Chunk, SymbolType
 from src.ingestion.indexer import (
     MANIFEST_FILENAME,
     IndexManifest,
@@ -14,6 +14,8 @@ from src.ingestion.indexer import (
     load_chroma_collection,
     load_manifest,
 )
+from src.ingestion.schemas import Chunk, SymbolType
+
 
 def _fake_chunk(
     name: str,
