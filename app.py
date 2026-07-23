@@ -8,6 +8,7 @@ from src.config import CACHE_ROOT, DEFAULT_RETRIEVAL_TOP_K, DEMO_REPO_URL, MAX_R
 from src.generation.cpu_backend import CPUBackend
 from src.ingestion.clone import repo_slug_from_url
 from src.ingestion.embedder import Embedder
+from src.ingestion.indexer import load_manifest
 from src.pipeline import compare
 from src.retrieval.rerank import Reranker
 from src.ui.compare_view import build_compare_view
@@ -41,6 +42,12 @@ def _demo_compare(question: str) -> tuple[PipelineResult, PipelineResult]:
     )
 
 
+def _demo_repo_context() -> tuple[str, str] | None:
+    """Return (repo_slug, repo_sha) for the demo index, or None if it hasn't been built yet."""
+    manifest = load_manifest(DEMO_CACHE_DIR)
+    return (DEMO_REPO_SLUG, manifest.repo_sha) if manifest is not None else None
+
+
 def _ingest(repo_url: str) -> str:
     """Ingest repo_url via scripts.build_index.ingest_repository; returns a status message."""
     try:
@@ -51,10 +58,12 @@ def _ingest(repo_url: str) -> str:
     return f"Indexed {result.repo_slug}@{result.repo_sha[:7]} — {result.chunk_count:,} chunks."
 
 
-with gr.Blocks(title="RAGnarok") as demo:
+with gr.Blocks(title="RAGnarok", theme=gr.themes.Soft()) as demo:
     with gr.Tabs():
         with gr.TabItem("Compare"):
-            build_compare_view(_demo_compare).render()  # type: ignore[no-untyped-call]  # gradio ships no stub for Blocks.render
+            build_compare_view(  # type: ignore[no-untyped-call]  # gradio ships no stub for Blocks.render
+                _demo_compare, repo_context=_demo_repo_context()
+            ).render()
         with gr.TabItem("Ingest a repo"):
             build_ingest_view(_ingest).render()  # type: ignore[no-untyped-call]  # gradio ships no stub for Blocks.render
 

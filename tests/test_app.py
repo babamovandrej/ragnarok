@@ -41,6 +41,25 @@ class TestLoadModels:
         assert first is not second
 
 
+class TestDemoRepoContext:
+    def test_returns_none_when_the_demo_index_has_never_been_built(self, monkeypatch):
+        import app
+
+        monkeypatch.setattr(app, "load_manifest", lambda cache_dir: None)
+
+        assert app._demo_repo_context() is None
+
+    def test_returns_slug_and_sha_when_the_demo_index_exists(self, monkeypatch):
+        import app
+
+        class _FakeManifest:
+            repo_sha = "abc123"
+
+        monkeypatch.setattr(app, "load_manifest", lambda cache_dir: _FakeManifest())
+
+        assert app._demo_repo_context() == (app.DEMO_REPO_SLUG, "abc123")
+
+
 class TestIngest:
     def test_reports_a_failure_as_a_status_message(self, monkeypatch):
         import app
