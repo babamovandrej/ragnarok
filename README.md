@@ -109,3 +109,14 @@ index; on Linux (e.g. HF Spaces), pass
 to either install command, or it will build from source. macOS arm64
 always builds from source (the prebuilt wheel index is broken for that
 platform).
+
+### Quality gates
+
+```bash
+ruff check .
+ruff format --check .
+mypy
+pytest -q --cov --cov-report=term-missing
+```
+
+All four run in CI (`.github/workflows/ci.yml`) on every push and pull request.

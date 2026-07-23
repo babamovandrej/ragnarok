@@ -86,20 +86,29 @@ Fixed demo/eval repo: **`encode/starlette`**.
    tagged as a `PipelineResult` (`pipeline`, `answer`, `citations`,
    `hop_path`, `context_texts`) — kept out of `src/baseline/` since it
    depends on `src/agent/`, not the other way around. `ui/compare_view.py`'s
-   `build_compare_view` wires a
-   two-column Gradio Blocks UI over an injected `compare_fn`;
-   `render_comparison`/`_format_result` render each column, showing a
-   "Verified citations"/hop-path badge only for the `ragnarok` column,
-   never for `naive`. `ui/hop_viz.py`'s `render_hop_path` renders a hop
-   path as markdown with clickable GitHub `blob` links (needs
-   `repo_slug`/`repo_sha` from the index manifest) — implemented and unit
-   tested standalone; not yet wired into `compare_view`'s rendering.
-   `ui/ingest_view.py`'s `build_ingest_view` is a second Gradio Blocks tab
-   (paste a repo URL → `scripts.build_index.ingest_repository` → status
-   message), mounted in `app.py` alongside the compare view. `app.py`
-   caches loaded `(Embedder, Reranker, CPUBackend)` per repo in an
+   `build_compare_view` wires a two-column Gradio Blocks UI (theme:
+   `gr.themes.Soft()`) over an injected `compare_fn`; `render_comparison`
+   guards against an empty question, wraps `compare_fn` in a try/except so
+   a backend failure renders a friendly inline message in both columns
+   instead of Gradio's generic error toast, and reports a `gr.Progress`
+   status while the (potentially slow, CPU-bound) pipeline runs.
+   `_format_ragnarok`/`_render_citations` render every citation
+   individually with its own verified/UNVERIFIED status (and a GitHub
+   link when the repo's `(slug, sha)` are known), and `ui/hop_viz.py`'s
+   `render_hop_path` (clickable GitHub `blob` links per hop) is wired into
+   the RAGnarok column whenever that repo context is available, falling
+   back to a plain symbol-name list otherwise. `ui/ingest_view.py`'s
+   `build_ingest_view` is a second Gradio Blocks tab (paste a repo URL →
+   `scripts.build_index.ingest_repository` → status message, with the
+   same empty-input guard and progress reporting), mounted in `app.py`
+   alongside the compare view. `app.py` resolves `(repo_slug, repo_sha)`
+   for the fixed demo repo via `load_manifest` (falling back to `None`,
+   i.e. no hop/citation links, if the demo index hasn't been built yet)
+   and caches loaded `(Embedder, Reranker, CPUBackend)` per repo in an
    `LRUCache` (`utils/caching.py`, capacity `MAX_RESIDENT_REPOS`) instead
-   of reloading them on every question.
+   of reloading them on every question. The Compare tab always targets the
+   fixed demo repo; it is not yet wired to whatever the Ingest tab most
+   recently indexed.
 
 7. **Evaluation** (`src/eval/`, `data/eval/qa_starlette.jsonl`) —
    `qa_dataset.py`'s `QAItem`/`load_qa_dataset` validate the 35-item
