@@ -56,7 +56,7 @@ Fixed demo/eval repo: **`encode/starlette`**.
 4. **Generation** (`src/generation/`) — `llm.py`'s `LLMBackend` is a
    `typing.Protocol` (`generate(prompt, max_tokens) -> str`) that every
    backend satisfies structurally. `cpu_backend.py`'s `CPUBackend` pulls
-   `Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF` (Q4_K_M) at a pinned revision
+   `Qwen/Qwen2.5-Coder-3B-Instruct-GGUF` (Q4_K_M) at a pinned revision
    via `huggingface_hub.hf_hub_download` (not `Llama.from_pretrained`,
    which has no `revision` parameter) and runs it
    through `llama-cpp-python`, installed from the prebuilt CPU wheel

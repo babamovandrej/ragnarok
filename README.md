@@ -77,7 +77,7 @@ happens, sourced directly from its output, not invented.
 |---|---|---|
 | [`jinaai/jina-embeddings-v2-base-code`](https://huggingface.co/jinaai/jina-embeddings-v2-base-code) | Dense embeddings (ingestion + retrieval) | Apache 2.0 |
 | [`cross-encoder/ms-marco-MiniLM-L-6-v2`](https://huggingface.co/cross-encoder/ms-marco-MiniLM-L-6-v2) | Cross-encoder reranking | Apache 2.0 |
-| [`Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF`](https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF) | CPU generation backend | Apache 2.0 |
+| [`Qwen/Qwen2.5-Coder-3B-Instruct-GGUF`](https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF) | CPU generation backend | Apache 2.0 |
 | [`Qwen/Qwen2.5-Coder-7B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct) | ZeroGPU generation backend | Apache 2.0 |
 
 Every model load in `src/` pins an exact commit `revision`, so none of
