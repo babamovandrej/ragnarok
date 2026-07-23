@@ -71,3 +71,6 @@ module = "src.generation.zerogpu_backend"
 disallow_untyped_calls = false
 disallow_untyped_decorators = false
 warn_return_any = false
+
+[tool.coverage.run]
+source = ["src", "scripts", "app"]

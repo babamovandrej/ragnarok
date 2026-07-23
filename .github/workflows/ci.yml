@@ -23,5 +23,11 @@ jobs:
       - name: Lint
         run: ruff check .
 
+      - name: Format check
+        run: ruff format --check .
+
+      - name: Type check
+        run: mypy
+
       - name: Test
-        run: pytest -q
+        run: pytest -q --cov --cov-report=term-missing
