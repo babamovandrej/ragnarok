@@ -1,8 +1,5 @@
 ---
 title: RAGnarok
-emoji: 🛡️
-colorFrom: gray
-colorTo: red
 sdk: gradio
 sdk_version: 5.50.0
 app_file: app.py
@@ -73,12 +70,12 @@ happens, sourced directly from its output, not invented.
 
 ## Third-party models
 
-| Model | Used for | License |
-|---|---|---|
-| [`jinaai/jina-embeddings-v2-base-code`](https://huggingface.co/jinaai/jina-embeddings-v2-base-code) | Dense embeddings (ingestion + retrieval) | Apache 2.0 |
-| [`cross-encoder/ms-marco-MiniLM-L-6-v2`](https://huggingface.co/cross-encoder/ms-marco-MiniLM-L-6-v2) | Cross-encoder reranking | Apache 2.0 |
-| [`Qwen/Qwen2.5-Coder-3B-Instruct-GGUF`](https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF) | CPU generation backend | Apache 2.0 |
-| [`Qwen/Qwen2.5-Coder-7B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct) | ZeroGPU generation backend | Apache 2.0 |
+| Model                                                                                                 | Used for                                 | License    |
+| ----------------------------------------------------------------------------------------------------- | ---------------------------------------- | ---------- |
+| [`jinaai/jina-embeddings-v2-base-code`](https://huggingface.co/jinaai/jina-embeddings-v2-base-code)   | Dense embeddings (ingestion + retrieval) | Apache 2.0 |
+| [`cross-encoder/ms-marco-MiniLM-L-6-v2`](https://huggingface.co/cross-encoder/ms-marco-MiniLM-L-6-v2) | Cross-encoder reranking                  | Apache 2.0 |
+| [`Qwen/Qwen2.5-Coder-3B-Instruct-GGUF`](https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF)   | CPU generation backend                   | Apache 2.0 |
+| [`Qwen/Qwen2.5-Coder-7B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct)             | ZeroGPU generation backend               | Apache 2.0 |
 
 Every model load in `src/` pins an exact commit `revision`, so none of
 these can silently change underneath the app.

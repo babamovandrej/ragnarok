@@ -1,12 +1,5 @@
 name: Reindex
 
-# Scheduled/dispatched incremental reindex of the demo repo (encode/starlette):
-# pull the last-pushed index from the HF Dataset repo, diff the repo against
-# that index's last-indexed SHA, re-chunk/re-embed only what changed, and push
-# the updated index back. Requires two things configured in this repo's
-# Settings before it can run for real (neither is set up in this session):
-#   - secrets.HF_TOKEN: a Hugging Face token with write access to the Dataset repo
-#   - vars.HF_DATASET_REPO: the target dataset repo id, e.g. "namespace/ragnarok-index"
 on:
   schedule:
     - cron: "0 6 * * *"
