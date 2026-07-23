@@ -21,7 +21,8 @@ class TestRenderPrompt:
     def test_includes_citation_format_and_i_dont_know_instructions(self):
         prompt = render_prompt("question", [])
 
-        assert "file#Lstart-Lend" in prompt
+        assert "src/foo.py#L10-L20" in prompt
+        assert "copying the exact location string" in prompt
         assert "I don't know" in prompt
 
     def test_includes_each_chunk_file_span_and_text(self):
@@ -36,3 +37,11 @@ class TestRenderPrompt:
         prompt = render_prompt("how does auth work?", [])
 
         assert "how does auth work?" in prompt
+
+    def test_ends_with_a_citation_reminder_immediately_before_answer(self):
+        prompt = render_prompt("q", [])
+
+        assert prompt.rstrip().endswith("Answer:")
+        reminder_index = prompt.index("Reminder:")
+        answer_index = prompt.rindex("Answer:")
+        assert reminder_index < answer_index
