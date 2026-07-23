@@ -31,6 +31,9 @@ def _fake_chunk(name: str, text: str, file_path: str = "a.py") -> Chunk:
 
 
 class _FakeEmbedder:
+    def __init__(self, device: str | None = None) -> None:
+        self.device = device
+
     def embed(self, texts: list[str]) -> np.ndarray:
         return np.ones((len(texts), 4), dtype=np.float32)
 
@@ -143,6 +146,14 @@ class TestBuildParser:
         assert build_parser().parse_args(["/tmp/cache", "q"]).agent is False
         assert build_parser().parse_args(["/tmp/cache", "q", "--agent"]).agent is True
 
+    def test_device_defaults_to_none_and_can_be_set(self):
+        assert build_parser().parse_args(["/tmp/cache", "q"]).device is None
+        assert build_parser().parse_args(["/tmp/cache", "q", "--device", "cpu"]).device == "cpu"
+
+    def test_rejects_invalid_device_choice(self):
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(["/tmp/cache", "q", "--device", "tpu"])
+
 
 class TestMain:
     def test_missing_index_returns_invalid_argument(self, tmp_path):
@@ -182,3 +193,19 @@ class TestMain:
         assert "Hop path:" in out
         assert "1. auth" in out
         assert "final answer, no citations." in out
+
+    def test_device_flag_is_passed_through_to_the_embedder(self, cache_dir, monkeypatch):
+        captured: dict[str, str | None] = {}
+
+        class _CapturingEmbedder(_FakeEmbedder):
+            def __init__(self, device: str | None = None) -> None:
+                super().__init__(device)
+                captured["device"] = device
+
+        monkeypatch.setattr("scripts.ask.Embedder", _CapturingEmbedder)
+        monkeypatch.setattr("scripts.ask.Reranker", _FakeReranker)
+        monkeypatch.setattr("scripts.ask.CPUBackend", lambda: _FakeBackend("an answer"))
+
+        main([str(cache_dir), "q", "--device", "cpu"])
+
+        assert captured == {"device": "cpu"}

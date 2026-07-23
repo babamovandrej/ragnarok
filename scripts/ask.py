@@ -95,6 +95,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Use the multi-hop LangGraph agent instead of single-hop retrieval.",
     )
+    parser.add_argument(
+        "--device", choices=["cpu", "cuda", "mps"], help="Force the embedding device."
+    )
     return parser
 
 
@@ -106,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("No index found at %s; run scripts/build_index.py first.", args.cache_dir)
         return EXIT_INVALID_ARGUMENT
 
-    embedder, reranker, backend = Embedder(), Reranker(), CPUBackend()
+    embedder, reranker, backend = Embedder(device=args.device), Reranker(), CPUBackend()
     hop_path: list[HopRecord] = []
     if args.agent:
         answer, citations, hop_path = answer_question_with_agent(
