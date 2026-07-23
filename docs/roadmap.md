@@ -13,12 +13,12 @@ Fixed demo repo for the running example and Phase 7 eval set: **`encode/starlett
 | 2 | [phase-02-ingestion.md](phases/phase-02-ingestion.md) | Chunker → embedder → indexer works offline on starlette | Done |
 | 3 | [phase-03-retrieval.md](phases/phase-03-retrieval.md) | Hybrid retrieval + rerank beats dense-only on sampled queries | Code complete — manual comparison pending |
 | 4 | [phase-04-generation.md](phases/phase-04-generation.md) | Single-hop generation + citation verification, CPU backend | Code complete — manual `scripts/ask.py` run pending |
-| 5 | [phase-05-agent.md](phases/phase-05-agent.md) | LangGraph multi-hop agent with tracked hop path | Not started |
-| 6 | [phase-06-comparison.md](phases/phase-06-comparison.md) | Naive-vs-RAGnarok side-by-side comparison UI | Not started |
-| 7 | [phase-07-eval.md](phases/phase-07-eval.md) | Hand-labeled eval set, RAGAS scoring, ablation table | Not started |
-| 8 | [phase-08-deployment.md](phases/phase-08-deployment.md) | Live public HF Space, ZeroGPU + CPU fallback, paste-a-repo UX | Not started |
-| 9 | [phase-09-ci.md](phases/phase-09-ci.md) | Incremental reindexing via GitHub Actions | Not started |
-| 10 | [phase-10-polish.md](phases/phase-10-polish.md) | README pitch, eval numbers, demo GIF, license audit | Not started |
+| 5 | [phase-05-agent.md](phases/phase-05-agent.md) | LangGraph multi-hop agent with tracked hop path | Code complete — real multi-hop demonstration run pending |
+| 6 | [phase-06-comparison.md](phases/phase-06-comparison.md) | Naive-vs-RAGnarok side-by-side comparison UI | Code complete — manual `python app.py` UI check pending |
+| 7 | [phase-07-eval.md](phases/phase-07-eval.md) | Hand-labeled eval set, RAGAS scoring, ablation table | Code complete — manual `scripts/run_eval.py` run pending |
+| 8 | [phase-08-deployment.md](phases/phase-08-deployment.md) | Live public HF Space, ZeroGPU + CPU fallback, paste-a-repo UX | Code complete — no live Space deployed yet |
+| 9 | [phase-09-ci.md](phases/phase-09-ci.md) | Incremental reindexing via GitHub Actions | Code complete — workflow never dispatched |
+| 10 | [phase-10-polish.md](phases/phase-10-polish.md) | README pitch, eval numbers, demo GIF, license audit | Partially done — diagram, license audit, DECISIONS.md pass done; eval numbers and demo GIF pending |
 
 ## Deferred, non-blocking decisions
 
@@ -29,10 +29,11 @@ blocking — revisit at the noted phase:
   source / 60s clone timeout) — confirm exact numbers before Phase 8.
 - **HF namespace/org** for the Space and Dataset repo — needed by Phase 8/9.
 - **RAGAS "passing bar"** for the README's headline claim — editorial call,
-  needed by Phase 10.
-- **Exact composition of the 30-50 Q&A items** (split across
-  single-hop/multi-hop/adversarial-IDK) — draft rubric in Phase 7, final
-  sign-off once drafted.
+  needed by Phase 10; still open since real RAGAS numbers don't exist yet
+  (see the Phase 7 entry in `DECISIONS.md`).
+- ~~Exact composition of the 30-50 Q&A items~~ — resolved in Phase 7:
+  `data/eval/qa_starlette.jsonl` (35 items: 20 single-hop, 10 multi-hop, 5
+  adversarial), rubric in `data/eval/README.md`.
 
 ## How to use this roadmap
 

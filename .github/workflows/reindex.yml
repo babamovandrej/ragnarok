@@ -1,0 +1,63 @@
+name: Reindex
+
+# Scheduled/dispatched incremental reindex of the demo repo (encode/starlette):
+# pull the last-pushed index from the HF Dataset repo, diff the repo against
+# that index's last-indexed SHA, re-chunk/re-embed only what changed, and push
+# the updated index back. Requires two things configured in this repo's
+# Settings before it can run for real (neither is set up in this session):
+#   - secrets.HF_TOKEN: a Hugging Face token with write access to the Dataset repo
+#   - vars.HF_DATASET_REPO: the target dataset repo id, e.g. "namespace/ragnarok-index"
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  reindex:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the demo repo with enough history to diff against
+        run: |
+          git clone https://github.com/encode/starlette .ragnarok_cache/clones/encode/starlette
+
+      - uses: actions/checkout@v4
+        with:
+          path: ragnarok
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        working-directory: ragnarok
+        run: |
+          pip install -e .
+          pip install -r requirements.txt
+
+      - name: Pull the last-pushed index (rehydrates Chroma from our parquet schema)
+        working-directory: ragnarok
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python -c "
+          from pathlib import Path
+          from src.utils.hf_dataset_io import refresh_if_stale
+          refresh_if_stale('${{ vars.HF_DATASET_REPO }}', Path('.ragnarok_cache/encode/starlette'), 'encode/starlette')
+          "
+
+      - name: Incremental reindex (re-chunk/re-embed only changed files)
+        working-directory: ragnarok
+        run: |
+          python scripts/build_index.py \
+            --repo-path ../.ragnarok_cache/clones/encode/starlette \
+            --cache-dir .ragnarok_cache/encode/starlette \
+            --incremental --json
+
+      - name: Push the updated index to the HF Dataset repo
+        working-directory: ragnarok
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python scripts/push_index_to_hub.py \
+            .ragnarok_cache/encode/starlette "${{ vars.HF_DATASET_REPO }}"

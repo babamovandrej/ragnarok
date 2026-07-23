@@ -23,6 +23,7 @@ from scripts.build_index import (
     IngestionResult,
     NoChunksProducedError,
     _ensure_disjoint,
+    _merge_incremental_chunks,
     _positive_int,
     _slug_from_local_path,
     _validate_cache_dir,
@@ -31,7 +32,9 @@ from scripts.build_index import (
     main,
     render_result,
 )
-from src.ingestion.clone import GitCommandError
+from src.ingestion.chunker import collect_chunks
+from src.ingestion.clone import GitCommandError, current_sha
+from src.ingestion.indexer import build_index
 from src.ingestion.schemas import IngestionStats
 
 
@@ -147,8 +150,8 @@ class TestIngestRepository:
         with pytest.raises(ValueError):
             ingest_repository("https://github.com/a/b", repo_path=tmp_path)
 
-    def test_incremental_is_rejected_as_not_implemented(self):
-        with pytest.raises(NotImplementedError):
+    def test_incremental_without_repo_path_is_rejected(self):
+        with pytest.raises(ValueError, match="repo-path"):
             ingest_repository("https://github.com/a/b", incremental=True)
 
     def test_revision_with_repo_path_is_rejected(self, tmp_path):
@@ -242,6 +245,127 @@ class TestIngestRepository:
 
         with pytest.raises(GitCommandError):
             ingest_repository(repo_path=not_a_repo, cache_dir=tmp_path / "cache")
+
+
+class TestIncrementalIngestion:
+    def test_requires_an_existing_index(self, tmp_path, fake_embedder):
+        repo = _init_local_repo(tmp_path / "repo")
+
+        with pytest.raises(IncompatibleCacheError, match="run a full build first"):
+            ingest_repository(repo_path=repo, cache_dir=tmp_path / "cache", incremental=True)
+
+    def test_skips_when_sha_is_unchanged(self, tmp_path, fake_embedder):
+        repo = _init_local_repo(tmp_path / "repo")
+        cache_dir = tmp_path / "cache"
+        ingest_repository(repo_path=repo, cache_dir=cache_dir)
+
+        second = ingest_repository(repo_path=repo, cache_dir=cache_dir, incremental=True)
+
+        assert second.skipped
+
+    def test_reindexes_only_changed_and_added_files(self, tmp_path, fake_embedder):
+        repo = _init_local_repo(tmp_path / "repo")
+        cache_dir = tmp_path / "cache"
+        first = ingest_repository(repo_path=repo, cache_dir=cache_dir)
+        assert first.chunk_count == 1
+
+        (repo / "a.py").write_text("def foo():\n    return 2\n")
+        (repo / "b.py").write_text("def bar():\n    return 3\n")
+        _run("git", "add", "-A", cwd=repo)
+        _run("git", "commit", "-q", "-m", "second", cwd=repo)
+        new_sha = current_sha(repo)
+
+        second = ingest_repository(repo_path=repo, cache_dir=cache_dir, incremental=True)
+
+        assert not second.skipped
+        assert second.repo_sha == new_sha
+        assert second.chunk_count == 2
+
+
+class TestMergeIncrementalChunks:
+    def test_reuses_unchanged_files_embeddings_and_reembeds_only_changed_ones(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _run("git", "init", "-q", cwd=repo)
+        _run("git", "config", "user.email", "test@example.com", cwd=repo)
+        _run("git", "config", "user.name", "Test", cwd=repo)
+        (repo / "a.py").write_text("def foo():\n    return 1\n")
+        (repo / "b.py").write_text("def bar():\n    return 2\n")
+        _run("git", "add", "-A", cwd=repo)
+        _run("git", "commit", "-q", "-m", "first", cwd=repo)
+        first_sha = current_sha(repo)
+
+        initial_chunks, _ = collect_chunks(repo)
+        initial_embeddings = np.array(
+            [[float(i), 0.0, 0.0, 0.0] for i in range(len(initial_chunks))], dtype=np.float32
+        )
+        cache_dir = tmp_path / "cache"
+        build_index(
+            initial_chunks, initial_embeddings, cache_dir, repo_slug="a/b", repo_sha=first_sha
+        )
+        original_b_embedding = next(
+            embedding
+            for chunk, embedding in zip(initial_chunks, initial_embeddings)
+            if chunk.file_path == "b.py"
+        )
+
+        (repo / "a.py").write_text("def foo():\n    return 999\n")
+        _run("git", "add", "-A", cwd=repo)
+        _run("git", "commit", "-q", "-m", "second", cwd=repo)
+
+        class _TrackingEmbedder:
+            def __init__(self) -> None:
+                self.embed_calls: list[list[str]] = []
+
+            def embed(self, texts: list[str]) -> np.ndarray:
+                self.embed_calls.append(list(texts))
+                return np.array([[100.0, 100.0, 100.0, 100.0] for _ in texts], dtype=np.float32)
+
+        embedder = _TrackingEmbedder()
+        merged_chunks, merged_embeddings, stats = _merge_incremental_chunks(
+            cache_dir, repo, first_sha, embedder
+        )
+
+        merged_by_file = dict(zip((c.file_path for c in merged_chunks), merged_embeddings))
+        assert set(merged_by_file) == {"a.py", "b.py"}
+        assert np.array_equal(merged_by_file["b.py"], original_b_embedding)
+        assert not np.array_equal(merged_by_file["a.py"], original_b_embedding)
+        assert stats.chunks_created == 1
+        all_embedded_texts = [text for call in embedder.embed_calls for text in call]
+        assert not any("bar" in text for text in all_embedded_texts)
+        assert any("999" in text for text in all_embedded_texts)
+
+    def test_deleted_file_is_dropped_entirely(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _run("git", "init", "-q", cwd=repo)
+        _run("git", "config", "user.email", "test@example.com", cwd=repo)
+        _run("git", "config", "user.name", "Test", cwd=repo)
+        (repo / "a.py").write_text("def foo():\n    return 1\n")
+        (repo / "b.py").write_text("def bar():\n    return 2\n")
+        _run("git", "add", "-A", cwd=repo)
+        _run("git", "commit", "-q", "-m", "first", cwd=repo)
+        first_sha = current_sha(repo)
+
+        initial_chunks, _ = collect_chunks(repo)
+        initial_embeddings = np.array(
+            [[float(i), 0.0, 0.0, 0.0] for i in range(len(initial_chunks))], dtype=np.float32
+        )
+        cache_dir = tmp_path / "cache"
+        build_index(
+            initial_chunks, initial_embeddings, cache_dir, repo_slug="a/b", repo_sha=first_sha
+        )
+
+        (repo / "b.py").unlink()
+        _run("git", "add", "-A", cwd=repo)
+        _run("git", "commit", "-q", "-m", "delete b", cwd=repo)
+
+        merged_chunks, _, stats = _merge_incremental_chunks(
+            cache_dir, repo, first_sha, _FakeEmbedder()
+        )
+
+        assert {c.file_path for c in merged_chunks} == {"a.py"}
+        assert stats.chunks_created == 0
 
 
 class TestIngestRepositoryWithUrl:

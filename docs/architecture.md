@@ -42,12 +42,18 @@ Fixed demo/eval repo: **`encode/starlette`**.
    anything reaches the LLM. Every stage returns `list[RetrievedChunk]`
    (a `Chunk` plus a relevance score, higher-is-better throughout).
 
-3. **Multi-hop agent** (`src/agent/`) — a LangGraph graph
-   (`retrieve → decide_more_hops → follow_symbol (max 3 hops) →
-   compose_answer`) can issue a follow-up retrieval for a symbol's
-   definition in another file. The ordered hop path (file, symbol, line
-   range, reason) is recorded as a serializable `HopRecord` list for UI
-   visualization.
+3. **Multi-hop agent** (`src/agent/`) — `state.py`'s pydantic `AgentState`
+   (question, retrieved context, `hop_path`, `hops_remaining`, answer) and
+   `HopRecord` (file, symbol, line range, reason — JSON round-trippable for
+   UI use). `tools.py` exposes `retrieve_hybrid` (the full Phase 3
+   pipeline) and `find_symbol_definition` (exact-name Chroma metadata
+   lookup, no embedding needed). `graph.py`'s `build_graph` wires a
+   LangGraph `StateGraph(AgentState)`: `retrieve → decide_more_hops →
+   follow_symbol → compose_answer`, looping `follow_symbol` back to
+   `decide_more_hops` until either it declines another hop or
+   `hops_remaining` (capped at `AGENT_MAX_HOPS`) hits zero. The hop-decision
+   function and symbol resolver are injected dependencies, so the graph's
+   control flow is testable without any real model call.
 
 4. **Generation** (`src/generation/`) — `llm.py`'s `LLMBackend` is a
    `typing.Protocol` (`generate(prompt, max_tokens) -> str`) that every
@@ -56,13 +62,15 @@ Fixed demo/eval repo: **`encode/starlette`**.
    via `huggingface_hub.hf_hub_download` (not `Llama.from_pretrained`,
    which has no `revision` parameter — see `DECISIONS.md`) and runs it
    through `llama-cpp-python`, installed from the prebuilt CPU wheel
-   index. `zerogpu_backend.py` (`Qwen/Qwen2.5-Coder-7B-Instruct` via
-   `@spaces.GPU`) is not yet implemented. `prompts.py`'s `render_prompt`
-   renders numbered context chunks with mandatory `file#Lstart-Lend`
-   citation instructions and an explicit "say I don't know" instruction.
-   ZeroGPU quota-exceeded errors will be caught and silently fall back to
-   the CPU backend once the ZeroGPU backend exists; the UI will surface
-   which backend answered.
+   index. `zerogpu_backend.py`'s `ZeroGPUBackend` runs the pinned
+   `Qwen/Qwen2.5-Coder-7B-Instruct` on an allocated ZeroGPU worker (its
+   `generate` method is `@spaces.GPU`-decorated). `fallback_backend.py`'s
+   `FallbackBackend` wraps a primary (ZeroGPU) and fallback (CPU) backend,
+   catching the `gr.Error` ZeroGPU raises on quota-exceeded and
+   transparently retrying on the CPU backend; `last_backend_used` lets the
+   UI surface which one answered. `prompts.py`'s `render_prompt` renders
+   numbered context chunks with mandatory `file#Lstart-Lend` citation
+   instructions and an explicit "say I don't know" instruction.
 
 5. **Citation verification** (`src/generation/citations.py`) —
    `verify_citations(answer, chunks)` parses every `file#Lstart-Lend` span
@@ -71,25 +79,56 @@ Fixed demo/eval repo: **`encode/starlette`**.
    are flagged (`Citation.verified = False`), never shown as fact.
 
 6. **Comparison mode** (`src/baseline/`, `src/ui/compare_view.py`) —
-   a naive baseline (single dense top-k, no BM25/rerank/hops, same LLM)
-   runs in parallel with the full RAGnarok pipeline on every query; the
-   Gradio UI shows both answers side by side with a verified-citation
-   badge on the RAGnarok column only.
+   `baseline/naive_rag.py`'s `answer_naive` runs a single dense top-k
+   retrieval with a plain prompt (no BM25, rerank, hops, or citation
+   instructions), `answer_ragnarok` runs the full Phase 5 agent graph
+   (`max_hops` overridable — `0` gives pure hybrid+rerank, used by the
+   Phase 7 ablation), and `compare()` runs both (naive first) tagged as a
+   `PipelineResult` (`pipeline`, `answer`, `citations`, `hop_path`,
+   `context_texts`). `ui/compare_view.py`'s `build_compare_view` wires a
+   two-column Gradio Blocks UI over an injected `compare_fn`;
+   `render_comparison`/`_format_result` render each column, showing a
+   "Verified citations"/hop-path badge only for the `ragnarok` column,
+   never for `naive`. `ui/hop_viz.py`'s `render_hop_path` renders a hop
+   path as markdown with clickable GitHub `blob` links (needs
+   `repo_slug`/`repo_sha` from the index manifest) — implemented and unit
+   tested standalone; not yet wired into `compare_view`'s rendering.
+   `ui/ingest_view.py`'s `build_ingest_view` is a second Gradio Blocks tab
+   (paste a repo URL → `scripts.build_index.ingest_repository` → status
+   message), mounted in `app.py` alongside the compare view. `app.py`
+   caches loaded `(Embedder, Reranker, CPUBackend)` per repo in an
+   `LRUCache` (`utils/caching.py`, capacity `MAX_RESIDENT_REPOS`) instead
+   of reloading them on every question.
 
-7. **Evaluation** (`src/eval/`) — a hand-labeled 30-50 item Q&A set
-   against starlette (single-hop, multi-hop, adversarial "not in this
-   repo" items) is scored with RAGAS-style metrics (faithfulness, context
-   precision/recall) using our own hosted model as the judge (a
-   `BaseRagasLLM` subclass wrapping `generation/llm.py` — no external judge
-   API), plus an ablation table comparing naive / hybrid+rerank / full
-   multi-hop.
+7. **Evaluation** (`src/eval/`, `data/eval/qa_starlette.jsonl`) —
+   `qa_dataset.py`'s `QAItem`/`load_qa_dataset` validate the 35-item
+   hand-labeled starlette set (20 single-hop, 10 multi-hop, 5 adversarial
+   "not in this repo" items — see `data/eval/README.md` for the labeling
+   rubric). `ragas_runner.py`'s `RagnarokRagasLLM(BaseRagasLLM)` wraps our
+   own `LLMBackend` as the RAGAS judge (no external judge API);
+   `run_ragas_eval` scores faithfulness, context precision, and context
+   recall. `ablation.py`'s `run_ablation` runs the same set through naive
+   / hybrid+rerank (0 hops) / full multi-hop and returns one `AblationRow`
+   per arm. `metrics.py`'s `idk_rate` checks what fraction of adversarial
+   items get an explicit "I don't know." `scripts/run_eval.py` wires it
+   all into a CLI (`--ablation` for the 3-row table).
 
 8. **Incremental indexing** (`.github/workflows/reindex.yml`,
-   `scripts/build_index.py --incremental`) — a scheduled/dispatched CI job
-   re-chunks and re-embeds only files changed since the last-indexed SHA,
-   merges into the parquet index, and pushes to the HF Dataset repo; the
-   Space compares its cached SHA against the Dataset repo's latest on
-   startup and pulls fresh parquet if stale.
+   `scripts/build_index.py --incremental`, `scripts/push_index_to_hub.py`) —
+   `build_index.py`'s `_merge_incremental_chunks` uses
+   `ingestion/clone.py`'s `changed_files_since` to re-chunk/re-embed only
+   files changed since the cached manifest's `repo_sha`, reusing every
+   other chunk's existing embedding straight from Chroma; `--incremental`
+   requires `--repo-path` and an existing compatible index to diff
+   against. `push_index_to_hub.py`'s `export_and_push` reads the built
+   Chroma collection back out, writes it to our parquet schema, and pushes
+   it to the HF Dataset repo. `utils/hf_dataset_io.py`'s
+   `refresh_if_stale` (used by both the CI job and, eventually, the Space
+   at startup) compares a local manifest's `repo_sha` against
+   `latest_commit_sha` on the Dataset repo and, if stale,
+   `pull_parquet`+`rehydrate_index_from_parquet` rebuild the local
+   Chroma+bm25 index from parquet — never from Chroma's own on-disk
+   format, per the Phase 0 decision.
 
 ## Repository structure
 
@@ -147,12 +186,19 @@ live in [`DECISIONS.md`](../DECISIONS.md).
 ## Flagged operational risks and mitigations
 
 1. **ZeroGPU free quota (~3.5 min/day, shared across every visitor)** →
-   transparent fallback to CPU backend on quota-exceeded; UI shows which
-   backend answered; comparison mode defaults to CPU for both columns.
+   `FallbackBackend` transparently retries on the CPU backend on a
+   `gr.Error` (quota-exceeded); `last_backend_used` lets the UI show which
+   backend answered; comparison mode uses the CPU backend for both
+   columns (see Phase 8 entry in `DECISIONS.md`).
 2. **`llama-cpp-python` won't build from source in Spaces' free build
    environment in time** → install from the prebuilt CPU wheel index.
 3. **Free CPU Spaces (2 vCPU/16GB RAM) shared across everything** → hard
-   ingestion ceiling, LRU eviction on resident in-memory indexes, demo
-   repo pre-warmed at startup.
+   ingestion ceiling (`MAX_INDEXABLE_CHUNKS`/`MAX_SOURCE_BYTES`, enforced
+   in `chunker.py` since Phase 2), `utils/caching.py`'s `LRUCache`
+   (capacity `MAX_RESIDENT_REPOS`) evicting the oldest resident
+   models/index once a new repo is ingested, demo repo pre-warmed at
+   startup (`app.py`'s `_load_models`/`_demo_compare`).
 4. **`jina-embeddings-v2-base-code` needs `trust_remote_code=True`** → pin
-   an exact commit revision for every third-party model load.
+   an exact commit revision for every third-party model load — audited
+   Phase 8: all five model loads (`Embedder`, `Reranker`, `CPUBackend`,
+   `ZeroGPUBackend` ×2) pass an explicit `revision=`, grep-verified.

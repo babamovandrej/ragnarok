@@ -3,7 +3,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from scripts.ask import EXIT_INVALID_ARGUMENT, EXIT_SUCCESS, answer_question, build_parser, main
+from scripts.ask import (
+    EXIT_INVALID_ARGUMENT,
+    EXIT_SUCCESS,
+    answer_question,
+    answer_question_with_agent,
+    build_parser,
+    main,
+)
 from src.config import DEFAULT_RETRIEVAL_TOP_K, GENERATION_MAX_TOKENS_DEFAULT
 from src.ingestion.indexer import build_index
 from src.ingestion.schemas import Chunk
@@ -41,6 +48,19 @@ class _FakeBackend:
     def generate(self, prompt: str, max_tokens: int) -> str:
         self.calls.append((prompt, max_tokens))
         return self.response
+
+
+class _ScriptedAgentBackend:
+    """Answers agent decide-more-hops prompts from a script, and every other prompt with answer."""
+
+    def __init__(self, decisions: list[str], answer: str) -> None:
+        self._decisions = iter(decisions)
+        self.answer = answer
+
+    def generate(self, prompt: str, max_tokens: int) -> str:
+        if "Reply:" in prompt:
+            return next(self._decisions, "DONE")
+        return self.answer
 
 
 @pytest.fixture
@@ -84,6 +104,30 @@ class TestAnswerQuestion:
         assert backend.calls[0][1] == 64
 
 
+class TestAnswerQuestionWithAgent:
+    def test_returns_answer_citations_and_hop_path(self, cache_dir):
+        backend = _ScriptedAgentBackend(
+            ["DONE"], "starlette/authentication.py#L1-L2 handles auth."
+        )
+
+        answer, citations, hop_path = answer_question_with_agent(
+            "how is auth handled?", cache_dir, _FakeEmbedder(), _FakeReranker(), backend, top_k=2
+        )
+
+        assert answer == backend.answer
+        assert citations[0].verified is True
+        assert hop_path == []
+
+    def test_records_a_resolved_hop_in_the_hop_path(self, cache_dir):
+        backend = _ScriptedAgentBackend(["auth", "DONE"], "final answer, no citations.")
+
+        _, _, hop_path = answer_question_with_agent(
+            "how is auth handled?", cache_dir, _FakeEmbedder(), _FakeReranker(), backend, top_k=2
+        )
+
+        assert [hop.symbol_name for hop in hop_path] == ["auth"]
+
+
 class TestBuildParser:
     def test_parses_cache_dir_and_question(self):
         args = build_parser().parse_args(["/tmp/cache", "how does auth work?"])
@@ -96,6 +140,10 @@ class TestBuildParser:
 
         assert args.top_k == DEFAULT_RETRIEVAL_TOP_K
         assert args.max_tokens == GENERATION_MAX_TOKENS_DEFAULT
+
+    def test_agent_flag_defaults_to_false_and_can_be_set(self):
+        assert build_parser().parse_args(["/tmp/cache", "q"]).agent is False
+        assert build_parser().parse_args(["/tmp/cache", "q", "--agent"]).agent is True
 
 
 class TestMain:
@@ -120,3 +168,21 @@ class TestMain:
         out = capsys.readouterr().out
         assert "Answer:" in out
         assert "starlette/authentication.py#L1-L2 [verified]" in out
+
+    def test_agent_flag_prints_the_hop_path_before_the_answer(
+        self, cache_dir, monkeypatch, capsys
+    ):
+        monkeypatch.setattr("scripts.ask.Embedder", _FakeEmbedder)
+        monkeypatch.setattr("scripts.ask.Reranker", _FakeReranker)
+        monkeypatch.setattr(
+            "scripts.ask.CPUBackend",
+            lambda: _ScriptedAgentBackend(["auth", "DONE"], "final answer, no citations."),
+        )
+
+        exit_code = main([str(cache_dir), "how is auth handled?", "--agent"])
+
+        assert exit_code == EXIT_SUCCESS
+        out = capsys.readouterr().out
+        assert "Hop path:" in out
+        assert "1. auth" in out
+        assert "final answer, no citations." in out
