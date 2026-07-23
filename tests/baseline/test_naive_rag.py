@@ -4,7 +4,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from src.baseline.naive_rag import answer_naive, answer_ragnarok, compare
+from src.baseline.naive_rag import answer_naive
 from src.ingestion.indexer import build_index
 from src.ingestion.schemas import Chunk
 
@@ -28,21 +28,13 @@ class _FakeEmbedder:
         return np.ones((len(texts), 4), dtype=np.float32)
 
 
-class _FakeReranker:
-    def rerank(self, query, candidates):
-        return candidates
-
-
 class _ScriptedBackend:
-    """Answers agent decide-more-hops prompts from a script, and every other prompt with answer."""
+    """Answers every prompt with a fixed answer."""
 
-    def __init__(self, decisions: list[str], answer: str) -> None:
-        self._decisions = iter(decisions)
+    def __init__(self, answer: str) -> None:
         self.answer = answer
 
     def generate(self, prompt: str, max_tokens: int) -> str:
-        if "Reply:" in prompt:
-            return next(self._decisions, "DONE")
         return self.answer
 
 
@@ -60,14 +52,13 @@ def cache_dir(tmp_path) -> Path:
 
 
 class TestAnswerNaive:
-    def test_never_calls_hybrid_sparse_rerank_or_agent_paths(self, cache_dir):
-        backend = _ScriptedBackend([], "a naive answer with no citation format.")
+    def test_never_calls_hybrid_sparse_or_rerank_paths(self, cache_dir):
+        backend = _ScriptedBackend("a naive answer with no citation format.")
 
         with (
             patch("src.agent.tools.query_sparse") as mock_sparse,
             patch("src.agent.tools.fuse_rrf") as mock_fuse,
             patch("src.retrieval.rerank.Reranker.rerank") as mock_rerank,
-            patch("src.baseline.naive_rag.build_graph") as mock_build_graph,
         ):
             result = answer_naive(
                 "how is auth handled?", cache_dir, _FakeEmbedder(), backend, top_k=2
@@ -76,7 +67,6 @@ class TestAnswerNaive:
         mock_sparse.assert_not_called()
         mock_fuse.assert_not_called()
         mock_rerank.assert_not_called()
-        mock_build_graph.assert_not_called()
         assert result.pipeline == "naive"
         assert result.citations == []
         assert result.hop_path == []
@@ -85,45 +75,3 @@ class TestAnswerNaive:
             "class AuthenticationMiddleware:\n    pass",
             "def add(a, b):\n    return a + b",
         }
-
-
-class TestAnswerRagnarok:
-    def test_returns_a_ragnarok_tagged_result_with_verified_citations(self, cache_dir):
-        backend = _ScriptedBackend(["DONE"], "starlette/authentication.py#L1-L2 handles auth.")
-
-        result = answer_ragnarok(
-            "how is auth handled?", cache_dir, _FakeEmbedder(), _FakeReranker(), backend, top_k=2
-        )
-
-        assert result.pipeline == "ragnarok"
-        assert result.citations[0].file_path == "starlette/authentication.py"
-        assert result.citations[0].verified is True
-        assert result.hop_path == []
-        assert result.context_texts != []
-
-    def test_max_hops_zero_disables_hopping(self, cache_dir):
-        backend = _ScriptedBackend(["auth"], "an answer")
-
-        result = answer_ragnarok(
-            "how is auth handled?",
-            cache_dir,
-            _FakeEmbedder(),
-            _FakeReranker(),
-            backend,
-            top_k=2,
-            max_hops=0,
-        )
-
-        assert result.hop_path == []
-
-
-class TestCompare:
-    def test_returns_naive_then_ragnarok_tagged_results(self, cache_dir):
-        backend = _ScriptedBackend(["DONE"], "an answer, no citations.")
-
-        naive_result, ragnarok_result = compare(
-            "how is auth handled?", cache_dir, _FakeEmbedder(), _FakeReranker(), backend, top_k=2
-        )
-
-        assert naive_result.pipeline == "naive"
-        assert ragnarok_result.pipeline == "ragnarok"

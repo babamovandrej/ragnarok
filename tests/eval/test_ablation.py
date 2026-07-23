@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from src.baseline.naive_rag import PipelineResult
+from src.baseline.schemas import PipelineResult
 from src.eval.ablation import _run_pipeline, run_ablation
 from src.eval.qa_dataset import QAItem
 

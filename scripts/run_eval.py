@@ -5,7 +5,6 @@ from pathlib import Path
 
 from ragas.dataset_schema import EvaluationResult
 
-from src.baseline.naive_rag import answer_ragnarok
 from src.config import DEFAULT_RETRIEVAL_TOP_K
 from src.eval.ablation import run_ablation
 from src.eval.metrics import idk_rate
@@ -14,6 +13,7 @@ from src.eval.ragas_runner import run_ragas_eval
 from src.generation.cpu_backend import CPUBackend
 from src.generation.llm import LLMBackend
 from src.ingestion.embedder import Embedder
+from src.pipeline import answer_ragnarok
 from src.retrieval.rerank import Reranker
 
 logger = logging.getLogger(__name__)

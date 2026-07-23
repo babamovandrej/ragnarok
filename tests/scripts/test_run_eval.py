@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from scripts.run_eval import EXIT_INVALID_ARGUMENT, EXIT_SUCCESS, build_parser, main
-from src.baseline.naive_rag import PipelineResult
+from src.baseline.schemas import PipelineResult
 from src.config import DEFAULT_RETRIEVAL_TOP_K
 from src.eval.ablation import AblationRow
 

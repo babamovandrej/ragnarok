@@ -1,12 +1,12 @@
 import gradio as gr
 
 from scripts.build_index import ingest_repository
-from src.baseline.naive_rag import compare
 from src.baseline.schemas import PipelineResult
 from src.config import CACHE_ROOT, DEFAULT_RETRIEVAL_TOP_K, DEMO_REPO_URL, MAX_RESIDENT_REPOS
 from src.generation.cpu_backend import CPUBackend
 from src.ingestion.clone import repo_slug_from_url
 from src.ingestion.embedder import Embedder
+from src.pipeline import compare
 from src.retrieval.rerank import Reranker
 from src.ui.compare_view import build_compare_view
 from src.ui.ingest_view import build_ingest_view

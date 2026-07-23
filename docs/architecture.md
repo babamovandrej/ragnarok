@@ -76,14 +76,17 @@ Fixed demo/eval repo: **`encode/starlette`**.
    within some real chunk's file and line range; unverifiable citations
    are flagged (`Citation.verified = False`), never shown as fact.
 
-6. **Comparison mode** (`src/baseline/`, `src/ui/compare_view.py`) —
-   `baseline/naive_rag.py`'s `answer_naive` runs a single dense top-k
-   retrieval with a plain prompt (no BM25, rerank, hops, or citation
-   instructions), `answer_ragnarok` runs the full Phase 5 agent graph
-   (`max_hops` overridable — `0` gives pure hybrid+rerank, used by the
-   Phase 7 ablation), and `compare()` runs both (naive first) tagged as a
-   `PipelineResult` (`pipeline`, `answer`, `citations`, `hop_path`,
-   `context_texts`). `ui/compare_view.py`'s `build_compare_view` wires a
+6. **Comparison mode** (`src/pipeline.py`, `src/baseline/`,
+   `src/ui/compare_view.py`) — `baseline/naive_rag.py`'s `answer_naive`
+   runs a single dense top-k retrieval with a plain prompt (no BM25,
+   rerank, hops, or citation instructions). `pipeline.py`'s
+   `answer_ragnarok` runs the full Phase 5 agent graph (`max_hops`
+   overridable — `0` gives pure hybrid+rerank, used by the Phase 7
+   ablation) and orchestrates both arms via `compare()` (naive first),
+   tagged as a `PipelineResult` (`pipeline`, `answer`, `citations`,
+   `hop_path`, `context_texts`) — kept out of `src/baseline/` since it
+   depends on `src/agent/`, not the other way around. `ui/compare_view.py`'s
+   `build_compare_view` wires a
    two-column Gradio Blocks UI over an injected `compare_fn`;
    `render_comparison`/`_format_result` render each column, showing a
    "Verified citations"/hop-path badge only for the `ragnarok` column,
@@ -141,11 +144,12 @@ ragnarok/
 │
 ├── src/
 │   ├── config.py                  # model IDs + pinned revisions, cache paths, caps
+│   ├── pipeline.py                # answer_ragnarok + compare(): orchestrates baseline + agent
 │   ├── ingestion/                 # clone.py, chunker.py, embedder.py, indexer.py, schemas.py
 │   ├── retrieval/                 # dense.py, sparse.py, hybrid.py, rerank.py
 │   ├── agent/                     # state.py, tools.py, graph.py
 │   ├── generation/                # llm.py, zerogpu_backend.py, cpu_backend.py, prompts.py, citations.py
-│   ├── baseline/                  # naive_rag.py
+│   ├── baseline/                  # naive_rag.py (answer_naive only)
 │   ├── eval/                      # qa_dataset.py, ragas_runner.py, ablation.py, metrics.py
 │   ├── ui/                        # compare_view.py, hop_viz.py, ingest_view.py
 │   └── utils/                     # caching.py, hf_dataset_io.py
