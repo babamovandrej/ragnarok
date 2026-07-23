@@ -73,3 +73,17 @@ class TestIngest:
 
         assert "Ingestion failed" in result
         assert "bad url" in result
+
+    def test_logs_the_exception_before_returning_the_status_message(self, monkeypatch, caplog):
+        import app
+
+        def _raise(repo_url):
+            raise ValueError("bad url")
+
+        monkeypatch.setattr(app, "ingest_repository", _raise)
+
+        with caplog.at_level("ERROR"):
+            app._ingest("https://github.com/nope/nope")
+
+        assert "Ingestion failed" in caplog.text
+        assert "https://github.com/nope/nope" in caplog.text
