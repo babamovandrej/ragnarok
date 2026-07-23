@@ -85,9 +85,27 @@ these can silently change underneath the app.
 
 ## Local development
 
+`pyproject.toml` declares the project's direct runtime dependencies, so a
+plain editable install works standalone:
+
 ```bash
-pip install -e .
-pip install -r requirements.txt
+pip install -e ".[dev]"
 pytest -q
 python app.py
 ```
+
+For an exact reproduction of the pinned, fully-resolved environment this
+was tested against (including transitive pins), use the frozen lock file
+instead:
+
+```bash
+pip install -e .
+pip install -r requirements.txt
+```
+
+`llama-cpp-python` ships a prebuilt CPU wheel for Linux from a custom
+index; on Linux (e.g. HF Spaces), pass
+`--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu`
+to either install command, or it will build from source. macOS arm64
+always builds from source (the prebuilt wheel index is broken for that
+platform).
