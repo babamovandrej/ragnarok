@@ -2,9 +2,7 @@
 
 This is the current-state design doc — it describes how the system is
 *meant* to fit together as of the latest phase completed. It is not a
-changelog; for the reasoning behind each choice and its history, see
-[`DECISIONS.md`](../DECISIONS.md). For task-by-task execution status, see
-[`roadmap.md`](roadmap.md).
+changelog. For task-by-task execution status, see [`roadmap.md`](roadmap.md).
 
 ## What it does
 
@@ -60,7 +58,7 @@ Fixed demo/eval repo: **`encode/starlette`**.
    backend satisfies structurally. `cpu_backend.py`'s `CPUBackend` pulls
    `Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF` (Q4_K_M) at a pinned revision
    via `huggingface_hub.hf_hub_download` (not `Llama.from_pretrained`,
-   which has no `revision` parameter — see `DECISIONS.md`) and runs it
+   which has no `revision` parameter) and runs it
    through `llama-cpp-python`, installed from the prebuilt CPU wheel
    index. `zerogpu_backend.py`'s `ZeroGPUBackend` runs the pinned
    `Qwen/Qwen2.5-Coder-7B-Instruct` on an allocated ZeroGPU worker (its
@@ -136,8 +134,7 @@ Fixed demo/eval repo: **`encode/starlette`**.
 ragnarok/
 ├── LICENSE
 ├── .gitignore
-├── README.md                      # Phase 10
-├── DECISIONS.md
+├── README.md
 ├── pyproject.toml                 # hatchling, requires-python ">=3.11,<3.13"
 ├── requirements.txt
 ├── app.py                         # HF Space entrypoint — thin Gradio Blocks launcher
@@ -150,16 +147,15 @@ ragnarok/
 │   ├── generation/                # llm.py, zerogpu_backend.py, cpu_backend.py, prompts.py, citations.py
 │   ├── baseline/                  # naive_rag.py
 │   ├── eval/                      # qa_dataset.py, ragas_runner.py, ablation.py, metrics.py
-│   ├── ui/                        # layout.py, compare_view.py, hop_viz.py
-│   └── utils/                     # caching.py, hf_dataset_io.py, logging.py
+│   ├── ui/                        # compare_view.py, hop_viz.py, ingest_view.py
+│   └── utils/                     # caching.py, hf_dataset_io.py
 │
 ├── tests/                         # mirrors package layout + fixtures/ + integration/
 ├── data/eval/                     # qa_starlette.jsonl + labeling rubric README
 ├── docs/
 │   ├── roadmap.md
-│   ├── architecture.md            # this file
-│   └── phases/phase-01-scaffold.md … phase-10-polish.md
-├── scripts/                       # build_index.py, ask.py, run_eval.py, push_index_to_hub.py
+│   └── architecture.md            # this file
+├── scripts/                       # build_index.py, ask.py, compare_retrieval.py, run_eval.py, push_index_to_hub.py
 ├── .github/workflows/             # ci.yml, reindex.yml
 └── .ragnarok_cache/                # GITIGNORED: cloned repos + local Chroma/bm25s indexes
 ```
@@ -180,16 +176,13 @@ ragnarok/
 | Judge model (eval) | Our own hosted model via custom `BaseRagasLLM` | Avoids a paid external judge API |
 | Repo cloning | plain `git` via `subprocess` | GitPython shells out to `git` anyway for our narrow needs |
 
-Full reasoning, alternatives considered, and trade-offs for each of these
-live in [`DECISIONS.md`](../DECISIONS.md).
-
 ## Flagged operational risks and mitigations
 
 1. **ZeroGPU free quota (~3.5 min/day, shared across every visitor)** →
    `FallbackBackend` transparently retries on the CPU backend on a
    `gr.Error` (quota-exceeded); `last_backend_used` lets the UI show which
    backend answered; comparison mode uses the CPU backend for both
-   columns (see Phase 8 entry in `DECISIONS.md`).
+   columns.
 2. **`llama-cpp-python` won't build from source in Spaces' free build
    environment in time** → install from the prebuilt CPU wheel index.
 3. **Free CPU Spaces (2 vCPU/16GB RAM) shared across everything** → hard

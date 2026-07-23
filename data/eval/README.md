@@ -47,6 +47,6 @@ hybrid+rerank / full multi-hop and reports one 3-row table — see
 fraction of the 5 adversarial items produce an explicit "I don't know"
 (target: ≥80%, i.e. at least 4 of 5).
 
-Neither script has been run against a real model in this repo yet (see
-`DECISIONS.md`, Phase 7 entry) — running them requires a built starlette
-index and real embedding/rerank/generation inference.
+Neither script has been run against a real model in this repo yet —
+running them requires a built starlette index and real embedding/rerank/
+generation inference.

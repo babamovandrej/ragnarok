@@ -19,10 +19,8 @@ across files. Every question also runs through a naive single-vector
 baseline so the value of hybrid retrieval + reranking + multi-hop is shown
 side by side, live, on the same query.
 
-See [`docs/roadmap.md`](docs/roadmap.md) for the phase-by-phase build plan,
-[`docs/architecture.md`](docs/architecture.md) for the current design, and
-[`DECISIONS.md`](DECISIONS.md) for the reasoning behind every non-obvious
-choice.
+See [`docs/roadmap.md`](docs/roadmap.md) for the phase-by-phase build plan
+and [`docs/architecture.md`](docs/architecture.md) for the current design.
 
 ## Architecture
 
@@ -54,8 +52,7 @@ flowchart TD
 ## Status
 
 Phases 1-9 are code-complete (see [`docs/roadmap.md`](docs/roadmap.md) for
-exact per-phase status). What's still outstanding, and why, is logged
-phase-by-phase in `DECISIONS.md`:
+exact per-phase status):
 
 - Several phases (3, 4, 5, 6, 7) have real-model-inference steps
   (comparison runs, eval scoring) that were deliberately not executed in
@@ -68,13 +65,11 @@ phase-by-phase in `DECISIONS.md`:
   need an HF namespace/token decision that hasn't been made yet.
 
 **Eval numbers and ablation table:** pending a real run of
-`scripts/run_eval.py --ablation` against a built `encode/starlette` index
-(see [`docs/phases/phase-07-eval.md`](docs/phases/phase-07-eval.md)). No
-placeholder numbers are shown here — they'll be filled in once that run
+`scripts/run_eval.py --ablation` against a built `encode/starlette` index.
+No placeholder numbers are shown here — they'll be filled in once that run
 happens, sourced directly from its output, not invented.
 
-**Demo GIF:** pending a real deployed instance to record from (see
-[`docs/phases/phase-08-deployment.md`](docs/phases/phase-08-deployment.md)).
+**Demo GIF:** pending a real deployed instance to record from.
 
 ## Third-party models
 
@@ -85,9 +80,8 @@ happens, sourced directly from its output, not invented.
 | [`Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF`](https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF) | CPU generation backend | Apache 2.0 |
 | [`Qwen/Qwen2.5-Coder-7B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct) | ZeroGPU generation backend | Apache 2.0 |
 
-Every model load in `src/` pins an exact commit `revision` (grep-verified
-in Phase 8 — see `DECISIONS.md`), so none of these can silently change
-underneath the app.
+Every model load in `src/` pins an exact commit `revision`, so none of
+these can silently change underneath the app.
 
 ## Local development
 
