@@ -3,7 +3,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from src.baseline.naive_rag import PipelineResult, answer_naive, answer_ragnarok
+from src.baseline.naive_rag import answer_naive, answer_ragnarok
+from src.baseline.schemas import PipelineResult
 from src.config import DEFAULT_RETRIEVAL_TOP_K
 from src.eval.qa_dataset import QAItem
 from src.eval.ragas_runner import run_ragas_eval

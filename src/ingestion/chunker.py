@@ -151,24 +151,18 @@ def _go_receiver_type_name(method_node: Node, source: bytes) -> str | None:
     receiver = method_node.child_by_field_name("receiver")
     if receiver is None:
         return None
-    receiver_param = next(
-        (c for c in receiver.children if c.type == "parameter_declaration"), None
-    )
+    receiver_param = next((c for c in receiver.children if c.type == "parameter_declaration"), None)
     if receiver_param is None:
         return None
     type_node = receiver_param.child_by_field_name("type")
     if type_node is None:
         return None
     if type_node.type == "pointer_type":
-        type_node = next(
-            (c for c in type_node.children if c.type == "type_identifier"), type_node
-        )
+        type_node = next((c for c in type_node.children if c.type == "type_identifier"), type_node)
     return source[type_node.start_byte : type_node.end_byte].decode("utf-8")
 
 
-def _qualified_name(
-    def_node: Node, name: str, language: SupportedLanguage, source: bytes
-) -> str:
+def _qualified_name(def_node: Node, name: str, language: SupportedLanguage, source: bytes) -> str:
     """Build a dotted name including enclosing scope."""
     if language == "go" and def_node.type == "method_declaration":
         receiver_type = _go_receiver_type_name(def_node, source)
@@ -327,9 +321,7 @@ def _disambiguate_qualified_names(chunks: list[Chunk]) -> list[Chunk]:
     return disambiguated
 
 
-def _whole_file_chunk(
-    source_text: str, language: SupportedLanguage, file_path: str
-) -> list[Chunk]:
+def _whole_file_chunk(source_text: str, language: SupportedLanguage, file_path: str) -> list[Chunk]:
     """Chunk a whole file, splitting into bounded parts if too long."""
     lines = source_text.splitlines()
     if not lines:
@@ -376,9 +368,7 @@ def _whole_file_chunk(
     return parts
 
 
-def chunk_source(
-    source_text: str, language: SupportedLanguage, file_path: str
-) -> list[Chunk]:
+def chunk_source(source_text: str, language: SupportedLanguage, file_path: str) -> list[Chunk]:
     """Chunk one file's source text into a list of Chunks."""
     if language in WHOLE_FILE_LANGUAGES:
         return _whole_file_chunk(source_text, language, file_path)

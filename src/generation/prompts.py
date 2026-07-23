@@ -5,7 +5,7 @@ from src.retrieval.schemas import RetrievedChunk
 logger = logging.getLogger(__name__)
 
 CITATION_INSTRUCTIONS = (
-    'Answer only using the numbered context below. Cite every claim with the exact span it '
+    "Answer only using the numbered context below. Cite every claim with the exact span it "
     'came from, in the form "file#Lstart-Lend" (e.g. src/foo.py#L10-L20). If the context does '
     'not contain the answer, say "I don\'t know" instead of guessing.'
 )

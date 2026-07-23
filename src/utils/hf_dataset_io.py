@@ -42,7 +42,9 @@ def push_to_hub(parquet_path: Path, repo_id: str) -> None:
 
 def latest_commit_sha(repo_id: str) -> str:
     """Return the current commit SHA of a Hugging Face Dataset repo."""
-    return HfApi().dataset_info(repo_id).sha
+    sha = HfApi().dataset_info(repo_id).sha
+    assert sha is not None, f"Dataset repo {repo_id} has no commit SHA"
+    return sha
 
 
 def pull_parquet(repo_id: str, filename: str, local_dir: Path) -> Path:

@@ -17,7 +17,7 @@ _GITHUB_HTTPS_URL_PATTERN = re.compile(
 _SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{7,64}$")
 
 
-class GitCommandError(RuntimeError): 
+class GitCommandError(RuntimeError):
     """A Git subprocess failed; message is safe to surface, detail is not."""
 
     def __init__(

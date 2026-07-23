@@ -19,7 +19,7 @@ RAGAS_METRICS = [Faithfulness(), LLMContextPrecisionWithoutReference(), LLMConte
 
 
 @dataclass
-class RagnarokRagasLLM(BaseRagasLLM):
+class RagnarokRagasLLM(BaseRagasLLM):  # type: ignore[misc]  # ragas ships no py.typed marker
     """Wraps our own LLMBackend as a RAGAS judge model, avoiding any external judge API."""
 
     backend: LLMBackend | None = None
@@ -32,6 +32,7 @@ class RagnarokRagasLLM(BaseRagasLLM):
         stop: list[str] | None = None,
         callbacks: Callbacks = None,
     ) -> LLMResult:
+        assert self.backend is not None, "RagnarokRagasLLM requires a backend"
         text = self.backend.generate(prompt.to_string(), max_tokens=GENERATION_MAX_TOKENS_DEFAULT)
         return LLMResult(generations=[[Generation(text=text)]])
 

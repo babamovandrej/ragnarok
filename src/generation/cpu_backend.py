@@ -1,8 +1,9 @@
 import logging
 import time
+from typing import cast
 
 from huggingface_hub import hf_hub_download
-from llama_cpp import Llama
+from llama_cpp import CreateChatCompletionResponse, Llama
 
 from src.config import (
     GENERATION_CONTEXT_WINDOW,
@@ -38,8 +39,13 @@ class CPUBackend:
 
     def generate(self, prompt: str, max_tokens: int = GENERATION_MAX_TOKENS_DEFAULT) -> str:
         """Generate a chat completion for prompt, capped at max_tokens output tokens."""
-        response = self._model.create_chat_completion(
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
+        response = cast(
+            CreateChatCompletionResponse,
+            self._model.create_chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+            ),
         )
-        return response["choices"][0]["message"]["content"]
+        content = response["choices"][0]["message"]["content"]
+        assert content is not None
+        return content

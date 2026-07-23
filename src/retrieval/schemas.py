@@ -1,7 +1,10 @@
-from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import cast
 
-from src.ingestion.schemas import Chunk
+from chromadb import Metadata
+from tree_sitter_language_pack import SupportedLanguage
+
+from src.ingestion.schemas import Chunk, SymbolType
 
 
 @dataclass(frozen=True)
@@ -12,16 +15,21 @@ class RetrievedChunk:
     score: float
 
 
-def chunk_from_chroma_record(chunk_id: str, text: str, metadata: Mapping[str, str | int]) -> Chunk:
-    """Reassemble a Chunk from what Chroma stores: the id, document text, and flat metadata."""
+def chunk_from_chroma_record(chunk_id: str, text: str, metadata: Metadata) -> Chunk:
+    """Reassemble a Chunk from what Chroma stores: the id, document text, and flat metadata.
+
+    Chroma's metadata values are typed as the wide `str | int | float | bool` union; the
+    conversions below are safe no-ops in practice since our own indexer only ever writes
+    str/int values, narrowed here to the precise types `Chunk` declares.
+    """
     return Chunk(
         chunk_id=chunk_id,
-        file_path=metadata["file_path"],
-        start_line=metadata["start_line"],
-        end_line=metadata["end_line"],
-        symbol_name=metadata["symbol_name"],
-        qualified_name=metadata["qualified_name"],
-        symbol_type=metadata["symbol_type"],
-        language=metadata["language"],
+        file_path=str(metadata["file_path"]),
+        start_line=int(metadata["start_line"]),
+        end_line=int(metadata["end_line"]),
+        symbol_name=str(metadata["symbol_name"]),
+        qualified_name=str(metadata["qualified_name"]),
+        symbol_type=cast(SymbolType, metadata["symbol_type"]),
+        language=cast(SupportedLanguage, metadata["language"]),
         text=text,
     )

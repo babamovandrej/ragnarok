@@ -106,9 +106,7 @@ class TestAnswerQuestion:
 
 class TestAnswerQuestionWithAgent:
     def test_returns_answer_citations_and_hop_path(self, cache_dir):
-        backend = _ScriptedAgentBackend(
-            ["DONE"], "starlette/authentication.py#L1-L2 handles auth."
-        )
+        backend = _ScriptedAgentBackend(["DONE"], "starlette/authentication.py#L1-L2 handles auth.")
 
         answer, citations, hop_path = answer_question_with_agent(
             "how is auth handled?", cache_dir, _FakeEmbedder(), _FakeReranker(), backend, top_k=2
@@ -169,9 +167,7 @@ class TestMain:
         assert "Answer:" in out
         assert "starlette/authentication.py#L1-L2 [verified]" in out
 
-    def test_agent_flag_prints_the_hop_path_before_the_answer(
-        self, cache_dir, monkeypatch, capsys
-    ):
+    def test_agent_flag_prints_the_hop_path_before_the_answer(self, cache_dir, monkeypatch, capsys):
         monkeypatch.setattr("scripts.ask.Embedder", _FakeEmbedder)
         monkeypatch.setattr("scripts.ask.Reranker", _FakeReranker)
         monkeypatch.setattr(

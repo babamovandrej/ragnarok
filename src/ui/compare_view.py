@@ -27,6 +27,7 @@ def _format_result(result: PipelineResult) -> str:
 
 def build_compare_view(compare_fn: CompareFn) -> gr.Blocks:
     """Build a two-column Gradio Blocks UI comparing the naive and RAGnarok pipelines."""
+    view: gr.Blocks
     with gr.Blocks(title="RAGnarok — naive vs. hybrid+rerank+agent") as view:
         gr.Markdown(
             "# RAGnarok\n\nCompare a naive single-vector baseline against the full "

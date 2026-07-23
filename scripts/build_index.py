@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+from chromadb.api.types import IncludeEnum
 
 from src.config import CACHE_ROOT, INDEX_SCHEMA_VERSION
 from src.ingestion.chunker import chunk_file, collect_chunks
@@ -163,11 +164,15 @@ def _merge_incremental_chunks(
     changed_paths |= {c.previous_path for c in changed if c.previous_path}
 
     collection = load_chroma_collection(cache_dir)
-    existing = collection.get(include=["documents", "metadatas", "embeddings"])
+    existing = collection.get(
+        include=[IncludeEnum.documents, IncludeEnum.metadatas, IncludeEnum.embeddings]
+    )
+    documents, metadatas = existing["documents"], existing["metadatas"]
+    assert documents is not None and metadatas is not None and existing["embeddings"] is not None
     kept_chunks: list[Chunk] = []
     kept_embeddings: list[list[float]] = []
     for chunk_id, text, metadata, embedding in zip(
-        existing["ids"], existing["documents"], existing["metadatas"], existing["embeddings"]
+        existing["ids"], documents, metadatas, existing["embeddings"]
     ):
         if metadata["file_path"] in changed_paths:
             continue

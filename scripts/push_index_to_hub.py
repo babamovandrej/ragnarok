@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from chromadb.api.types import IncludeEnum
 
 from src.ingestion.indexer import load_chroma_collection, load_manifest
 from src.retrieval.schemas import chunk_from_chroma_record
@@ -22,12 +23,14 @@ def export_and_push(cache_dir: Path, repo_id: str) -> Path:
         raise ValueError(f"No manifest at {cache_dir}; run scripts/build_index.py first.")
 
     collection = load_chroma_collection(cache_dir)
-    records = collection.get(include=["documents", "metadatas", "embeddings"])
+    records = collection.get(
+        include=[IncludeEnum.documents, IncludeEnum.metadatas, IncludeEnum.embeddings]
+    )
+    documents, metadatas = records["documents"], records["metadatas"]
+    assert documents is not None and metadatas is not None
     chunks = [
         chunk_from_chroma_record(chunk_id, text, metadata)
-        for chunk_id, text, metadata in zip(
-            records["ids"], records["documents"], records["metadatas"]
-        )
+        for chunk_id, text, metadata in zip(records["ids"], documents, metadatas)
     ]
     embeddings = np.array(records["embeddings"])
 

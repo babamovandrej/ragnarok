@@ -27,9 +27,7 @@ class TestRenderPrompt:
     def test_includes_each_chunk_file_span_and_text(self):
         chunk = _fake_chunk("AuthenticationMiddleware", "class AuthenticationMiddleware: ...")
 
-        prompt = render_prompt(
-            "how is auth validated?", [RetrievedChunk(chunk=chunk, score=1.0)]
-        )
+        prompt = render_prompt("how is auth validated?", [RetrievedChunk(chunk=chunk, score=1.0)])
 
         assert "starlette/authentication.py#L10-L20" in prompt
         assert "class AuthenticationMiddleware: ..." in prompt

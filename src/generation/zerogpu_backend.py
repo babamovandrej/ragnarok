@@ -24,9 +24,10 @@ class ZeroGPUBackend:
         self._tokenizer = AutoTokenizer.from_pretrained(
             ZEROGPU_MODEL_ID, revision=ZEROGPU_MODEL_REVISION
         )
-        self._model = AutoModelForCausalLM.from_pretrained(
+        model = AutoModelForCausalLM.from_pretrained(
             ZEROGPU_MODEL_ID, revision=ZEROGPU_MODEL_REVISION, torch_dtype=torch.bfloat16
-        ).to("cuda")
+        )
+        self._model = model.to("cuda")  # type: ignore[arg-type]  # transformers' AutoModel stub mistypes .to()
         logger.info("Loaded ZeroGPU generation model in %.1fs", time.monotonic() - started)
 
     @spaces.GPU

@@ -127,9 +127,7 @@ class TestBuildParser:
 
     def test_rejects_non_positive_embedding_batch_size(self):
         with pytest.raises(SystemExit):
-            build_parser().parse_args(
-                ["https://github.com/a/b", "--embedding-batch-size", "0"]
-            )
+            build_parser().parse_args(["https://github.com/a/b", "--embedding-batch-size", "0"])
 
     def test_rejects_invalid_log_level(self):
         with pytest.raises(SystemExit):
@@ -521,9 +519,7 @@ class TestMainExitCodes:
         assert payload["repo_slug"] == "local/repo"
         assert payload["chunk_count"] == 1
 
-    def test_embedding_failure_returns_index_build_failed_exit_code(
-        self, tmp_path, monkeypatch
-    ):
+    def test_embedding_failure_returns_index_build_failed_exit_code(self, tmp_path, monkeypatch):
         repo = _init_local_repo(tmp_path / "repo")
 
         def _boom(*args, **kwargs):
@@ -549,9 +545,7 @@ class TestMainExitCodes:
 
         assert exit_code == EXIT_INDEX_BUILD_FAILED
 
-    def test_unexpected_exception_returns_unexpected_error_exit_code(
-        self, tmp_path, monkeypatch
-    ):
+    def test_unexpected_exception_returns_unexpected_error_exit_code(self, tmp_path, monkeypatch):
         def _boom(*args, **kwargs):
             raise TypeError("something truly unexpected")
 
@@ -616,9 +610,9 @@ def _make_result(
         cache_dir=cache_dir,
         chunk_count=chunk_count,
         embedding_dimension=embedding_dimension,
-        stats=stats if stats is not None else IngestionStats(
-            files_scanned=5, files_chunked=3, files_skipped=2
-        ),
+        stats=stats
+        if stats is not None
+        else IngestionStats(files_scanned=5, files_chunked=3, files_skipped=2),
         clone_seconds=clone_seconds,
         chunk_seconds=chunk_seconds,
         embedding_seconds=embedding_seconds,

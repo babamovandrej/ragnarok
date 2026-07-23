@@ -3,6 +3,7 @@ from pathlib import Path
 
 import bm25s
 import chromadb
+from chromadb.api.types import IncludeEnum
 
 from src.config import DEFAULT_RETRIEVAL_TOP_K
 from src.retrieval.schemas import RetrievedChunk, chunk_from_chroma_record
@@ -20,17 +21,15 @@ def query_sparse(
     retriever = bm25s.BM25.load(str(bm25_dir), load_corpus=True)
     num_docs = retriever.scores["num_docs"]
     query_tokens = bm25s.tokenize([query_text], show_progress=False)
-    results, scores = retriever.retrieve(
-        query_tokens, k=min(top_k, num_docs), show_progress=False
-    )
+    results, scores = retriever.retrieve(query_tokens, k=min(top_k, num_docs), show_progress=False)
 
     chunk_ids = [str(match["text"]) for match in results[0]]
-    fetched = collection.get(ids=chunk_ids, include=["documents", "metadatas"])
+    fetched = collection.get(ids=chunk_ids, include=[IncludeEnum.documents, IncludeEnum.metadatas])
+    documents, metadatas = fetched["documents"], fetched["metadatas"]
+    assert documents is not None and metadatas is not None
     chunks_by_id = {
         chunk_id: chunk_from_chroma_record(chunk_id, text, metadata)
-        for chunk_id, text, metadata in zip(
-            fetched["ids"], fetched["documents"], fetched["metadatas"]
-        )
+        for chunk_id, text, metadata in zip(fetched["ids"], documents, metadatas)
     }
     retrieved = [
         RetrievedChunk(chunk=chunks_by_id[chunk_id], score=float(score))

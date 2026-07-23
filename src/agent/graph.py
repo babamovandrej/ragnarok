@@ -1,11 +1,12 @@
 import logging
 from collections.abc import Callable
+from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from src.agent.state import AgentState, HopRecord
-from src.config import GENERATION_MAX_TOKENS_DEFAULT
+from src.config import AGENT_HOP_DECISION_MAX_TOKENS, GENERATION_MAX_TOKENS_DEFAULT
 from src.generation.llm import LLMBackend
 from src.generation.prompts import render_prompt
 from src.retrieval.schemas import RetrievedChunk
@@ -15,6 +16,17 @@ logger = logging.getLogger(__name__)
 RetrieveFn = Callable[[str], list[RetrievedChunk]]
 FindSymbolFn = Callable[[str], RetrievedChunk | None]
 DecideMoreHopsFn = Callable[[AgentState], str | None]
+
+
+class _AgentStateUpdate(TypedDict, total=False):
+    """Partial update applied to `AgentState` after a graph node runs."""
+
+    context: list[RetrievedChunk]
+    hop_path: list[HopRecord]
+    pending_symbol: str | None
+    hops_remaining: int
+    answer: str
+
 
 DECIDE_MORE_HOPS_PROMPT = (
     "You are deciding whether one more symbol lookup would help answer the question, "
@@ -28,7 +40,7 @@ def llm_decide_more_hops(backend: LLMBackend, state: AgentState) -> str | None:
     """Ask backend whether another symbol lookup would help; None means stop hopping."""
     context = "\n".join(f"- {c.chunk.qualified_name} ({c.chunk.file_path})" for c in state.context)
     prompt = DECIDE_MORE_HOPS_PROMPT.format(question=state.question, context=context)
-    reply = backend.generate(prompt, max_tokens=32).strip()
+    reply = backend.generate(prompt, max_tokens=AGENT_HOP_DECISION_MAX_TOKENS).strip()
     return None if reply.upper() == "DONE" else reply
 
 
@@ -40,12 +52,12 @@ def build_graph(
 ) -> CompiledStateGraph:
     """Wire retrieve -> decide_more_hops -> follow_symbol (looped) -> compose_answer."""
 
-    def retrieve_node(state: AgentState) -> dict:
+    def retrieve_node(state: AgentState) -> _AgentStateUpdate:
         context = retrieve(state.question)
         logger.info("Initial retrieval returned %d chunk(s)", len(context))
         return {"context": context}
 
-    def decide_more_hops_node(state: AgentState) -> dict:
+    def decide_more_hops_node(state: AgentState) -> _AgentStateUpdate:
         if state.hops_remaining <= 0:
             return {"pending_symbol": None}
         return {"pending_symbol": decide_more_hops(state)}
@@ -53,8 +65,9 @@ def build_graph(
     def route_after_decision(state: AgentState) -> str:
         return "follow_symbol" if state.pending_symbol else "compose_answer"
 
-    def follow_symbol_node(state: AgentState) -> dict:
+    def follow_symbol_node(state: AgentState) -> _AgentStateUpdate:
         symbol = state.pending_symbol
+        assert symbol is not None, "follow_symbol_node reached without a pending symbol"
         found = find_symbol(symbol)
         if found is None:
             logger.info("Could not resolve symbol %s; stopping hops", symbol)
@@ -73,7 +86,7 @@ def build_graph(
             "hops_remaining": state.hops_remaining - 1,
         }
 
-    def compose_answer_node(state: AgentState) -> dict:
+    def compose_answer_node(state: AgentState) -> _AgentStateUpdate:
         prompt = render_prompt(state.question, state.context)
         answer = backend.generate(prompt, max_tokens=GENERATION_MAX_TOKENS_DEFAULT)
         return {"answer": answer}

@@ -3,6 +3,8 @@ import logging
 import sys
 from pathlib import Path
 
+from ragas.dataset_schema import EvaluationResult
+
 from src.baseline.naive_rag import answer_ragnarok
 from src.config import DEFAULT_RETRIEVAL_TOP_K
 from src.eval.ablation import run_ablation
@@ -29,7 +31,7 @@ def run_pipeline_eval(
     reranker: Reranker,
     backend: LLMBackend,
     top_k: int,
-):
+) -> tuple[EvaluationResult, float]:
     """Answer every QA item with the full RAGnarok pipeline; score with RAGAS + adversarial IDK."""
     results = [
         answer_ragnarok(item.question, cache_dir, embedder, reranker, backend, top_k=top_k)
@@ -80,9 +82,7 @@ def main(argv: list[str] | None = None) -> int:
     embedder, reranker, backend = Embedder(), Reranker(), CPUBackend()
 
     if args.ablation:
-        rows = run_ablation(
-            qa_items, args.cache_dir, embedder, reranker, backend, top_k=args.top_k
-        )
+        rows = run_ablation(qa_items, args.cache_dir, embedder, reranker, backend, top_k=args.top_k)
         print(f"{'pipeline':<15}{'faithfulness':>14}{'ctx_precision':>15}{'ctx_recall':>12}")
         for row in rows:
             print(

@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 
 import chromadb
+from chromadb.api.types import IncludeEnum
 
 from src.config import DEFAULT_RETRIEVAL_TOP_K
 from src.ingestion.embedder import Embedder
@@ -35,10 +36,14 @@ def find_symbol_definition(
 ) -> RetrievedChunk | None:
     """Look up the chunk whose symbol_name exactly matches symbol_name, or None if absent."""
     result = collection.get(
-        where={"symbol_name": symbol_name}, include=["documents", "metadatas"], limit=1
+        where={"symbol_name": symbol_name},
+        include=[IncludeEnum.documents, IncludeEnum.metadatas],
+        limit=1,
     )
     if not result["ids"]:
         logger.info("No chunk found defining symbol %s", symbol_name)
         return None
-    chunk_id, text, metadata = result["ids"][0], result["documents"][0], result["metadatas"][0]
+    documents, metadatas = result["documents"], result["metadatas"]
+    assert documents is not None and metadatas is not None
+    chunk_id, text, metadata = result["ids"][0], documents[0], metadatas[0]
     return RetrievedChunk(chunk=chunk_from_chroma_record(chunk_id, text, metadata), score=1.0)

@@ -12,9 +12,7 @@ def test_python_chunks_match_expected_line_ranges():
 
     chunks = chunk_source(source, "python", "sample.py")
 
-    actual = [
-        (c.start_line, c.end_line, c.symbol_type, c.symbol_name) for c in chunks
-    ]
+    actual = [(c.start_line, c.end_line, c.symbol_type, c.symbol_name) for c in chunks]
     assert actual == [
         (6, 9, "function", "top_level_function"),
         (12, 20, "class", "Example"),
@@ -49,9 +47,7 @@ def test_typescript_chunks_match_expected_line_ranges():
 
     chunks = chunk_source(source, "typescript", "sample.ts")
 
-    actual = [
-        (c.start_line, c.end_line, c.symbol_type, c.symbol_name) for c in chunks
-    ]
+    actual = [(c.start_line, c.end_line, c.symbol_type, c.symbol_name) for c in chunks]
     assert actual == [
         (1, 4, "function", "topLevelFunction"),
         (6, 15, "class", "Example"),
@@ -65,9 +61,7 @@ def test_go_chunks_match_expected_line_ranges():
 
     chunks = chunk_source(source, "go", "sample.go")
 
-    actual = [
-        (c.start_line, c.end_line, c.symbol_type, c.symbol_name) for c in chunks
-    ]
+    actual = [(c.start_line, c.end_line, c.symbol_type, c.symbol_name) for c in chunks]
     assert actual == [
         (3, 6, "function", "Foo"),
         (8, 10, "struct", "Bar"),
@@ -105,9 +99,7 @@ def test_rust_chunks_match_expected_line_ranges():
 
     chunks = chunk_source(source, "rust", "sample.rs")
 
-    actual = [
-        (c.start_line, c.end_line, c.symbol_type, c.symbol_name) for c in chunks
-    ]
+    actual = [(c.start_line, c.end_line, c.symbol_type, c.symbol_name) for c in chunks]
     assert actual == [
         (1, 4, "function", "foo"),
         (6, 9, "struct", "Bar"),
@@ -129,9 +121,7 @@ def test_java_chunks_match_expected_line_ranges():
 
     chunks = chunk_source(source, "java", "Sample.java")
 
-    actual = [
-        (c.start_line, c.end_line, c.symbol_type, c.symbol_name) for c in chunks
-    ]
+    actual = [(c.start_line, c.end_line, c.symbol_type, c.symbol_name) for c in chunks]
     assert actual == [
         (1, 6, "class", "Bar"),
         (2, 5, "method", "method"),
@@ -145,9 +135,7 @@ def test_c_chunks_match_expected_line_ranges():
 
     chunks = chunk_source(source, "c", "sample.c")
 
-    actual = [
-        (c.start_line, c.end_line, c.symbol_type, c.symbol_name) for c in chunks
-    ]
+    actual = [(c.start_line, c.end_line, c.symbol_type, c.symbol_name) for c in chunks]
     assert actual == [
         (1, 4, "function", "foo"),
         (6, 8, "struct", "Bar"),
@@ -159,9 +147,7 @@ def test_cpp_chunks_match_expected_line_ranges():
 
     chunks = chunk_source(source, "cpp", "sample.cpp")
 
-    actual = [
-        (c.start_line, c.end_line, c.symbol_type, c.symbol_name) for c in chunks
-    ]
+    actual = [(c.start_line, c.end_line, c.symbol_type, c.symbol_name) for c in chunks]
     assert actual == [
         (1, 3, "function", "foo"),
         (5, 10, "class", "Bar"),
@@ -198,13 +184,7 @@ def test_cpp_constructor_destructor_and_operator_names():
 
 
 def test_cpp_overloaded_methods_get_unique_disambiguated_ids():
-    source = (
-        "class Bar {\n"
-        "public:\n"
-        "    void foo(int x) {}\n"
-        "    void foo(double x) {}\n"
-        "};\n"
-    )
+    source = "class Bar {\npublic:\n    void foo(int x) {}\n    void foo(double x) {}\n};\n"
 
     chunks = chunk_source(source, "cpp", "overload.cpp")
     overloads = [c for c in chunks if c.symbol_name == "foo"]
@@ -275,9 +255,7 @@ def test_leading_comment_attaches_only_when_adjacent():
     attached = chunk_source("# comment\ndef foo():\n    pass\n", "python", "x.py")
     assert attached[0].start_line == 1
 
-    not_attached = chunk_source(
-        "# unrelated comment\n\ndef foo():\n    pass\n", "python", "x.py"
-    )
+    not_attached = chunk_source("# unrelated comment\n\ndef foo():\n    pass\n", "python", "x.py")
     assert not_attached[0].start_line == 3
 
 

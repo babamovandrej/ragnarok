@@ -2,6 +2,7 @@ import gradio as gr
 
 from scripts.build_index import ingest_repository
 from src.baseline.naive_rag import compare
+from src.baseline.schemas import PipelineResult
 from src.config import CACHE_ROOT, DEFAULT_RETRIEVAL_TOP_K, DEMO_REPO_URL, MAX_RESIDENT_REPOS
 from src.generation.cpu_backend import CPUBackend
 from src.ingestion.clone import repo_slug_from_url
@@ -14,10 +15,11 @@ from src.utils.caching import LRUCache
 DEMO_REPO_SLUG = repo_slug_from_url(DEMO_REPO_URL)
 DEMO_CACHE_DIR = CACHE_ROOT / DEMO_REPO_SLUG
 
-_model_cache: LRUCache = LRUCache(capacity=MAX_RESIDENT_REPOS)
+_ModelBundle = tuple[Embedder, Reranker, CPUBackend]
+_model_cache: LRUCache[_ModelBundle] = LRUCache(capacity=MAX_RESIDENT_REPOS)
 
 
-def _load_models(cache_key: str) -> tuple[Embedder, Reranker, CPUBackend]:
+def _load_models(cache_key: str) -> _ModelBundle:
     """Return this repo's (Embedder, Reranker, CPUBackend), loading and caching them once."""
     cached = _model_cache.get(cache_key)
     if cached is not None:
@@ -27,7 +29,7 @@ def _load_models(cache_key: str) -> tuple[Embedder, Reranker, CPUBackend]:
     return models
 
 
-def _demo_compare(question: str):
+def _demo_compare(question: str) -> tuple[PipelineResult, PipelineResult]:
     """Compare naive vs. RAGnarok on the pre-warmed demo repo, reusing cached models."""
     embedder, reranker, backend = _load_models(DEMO_REPO_SLUG)
     return compare(
@@ -47,9 +49,9 @@ def _ingest(repo_url: str) -> str:
 with gr.Blocks(title="RAGnarok") as demo:
     with gr.Tabs():
         with gr.TabItem("Compare"):
-            build_compare_view(_demo_compare).render()
+            build_compare_view(_demo_compare).render()  # type: ignore[no-untyped-call]  # gradio ships no stub for Blocks.render
         with gr.TabItem("Ingest a repo"):
-            build_ingest_view(_ingest).render()
+            build_ingest_view(_ingest).render()  # type: ignore[no-untyped-call]  # gradio ships no stub for Blocks.render
 
 if __name__ == "__main__":
     demo.launch()

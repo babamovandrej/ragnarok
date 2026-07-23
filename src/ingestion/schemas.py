@@ -5,6 +5,7 @@ from tree_sitter_language_pack import SupportedLanguage
 
 SymbolType = Literal["function", "method", "class", "interface", "struct", "type", "file"]
 
+
 @dataclass(frozen=True)
 class Chunk:
     chunk_id: str

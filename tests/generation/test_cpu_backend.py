@@ -25,9 +25,7 @@ def mock_llama():
 
 
 class TestCPUBackend:
-    def test_downloads_the_pinned_model_repo_filename_and_revision(
-        self, mock_download, mock_llama
-    ):
+    def test_downloads_the_pinned_model_repo_filename_and_revision(self, mock_download, mock_llama):
         CPUBackend()
 
         mock_download.assert_called_once_with(

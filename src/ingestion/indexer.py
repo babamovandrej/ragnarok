@@ -130,9 +130,7 @@ def _chunk_metadata(chunk: Chunk) -> dict[str, str | int]:
     }
 
 
-def _build_chroma_collection(
-    chunks: list[Chunk], embeddings: np.ndarray, chroma_dir: Path
-) -> None:
+def _build_chroma_collection(chunks: list[Chunk], embeddings: np.ndarray, chroma_dir: Path) -> None:
     """Create a fresh Chroma collection at chroma_dir populated with the given chunks/embeddings."""
     client = chromadb.PersistentClient(path=str(chroma_dir))
     collection = client.create_collection(COLLECTION_NAME, metadata={"hnsw:space": "cosine"})
