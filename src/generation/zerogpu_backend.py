@@ -5,12 +5,9 @@ import spaces
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from src.config import GENERATION_MAX_TOKENS_DEFAULT
+from src.config import GENERATION_MAX_TOKENS_DEFAULT, ZEROGPU_MODEL_ID, ZEROGPU_MODEL_REVISION
 
 logger = logging.getLogger(__name__)
-
-ZEROGPU_MODEL_ID = "Qwen/Qwen2.5-Coder-7B-Instruct"
-ZEROGPU_MODEL_REVISION = "c03e6d358207e414f1eca0bb1891e29f1db0e242"
 
 
 class ZeroGPUBackend:

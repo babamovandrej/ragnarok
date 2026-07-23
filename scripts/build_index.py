@@ -527,7 +527,7 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         logger.warning("Ingestion cancelled")
         return EXIT_INTERRUPTED
-    except (ValueError, NotImplementedError) as exc:
+    except ValueError as exc:
         logger.error("%s", exc)
         return EXIT_INVALID_ARGUMENT
     except GitCommandError as exc:

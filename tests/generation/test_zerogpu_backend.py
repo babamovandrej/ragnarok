@@ -3,11 +3,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from src.generation.zerogpu_backend import (
-    ZEROGPU_MODEL_ID,
-    ZEROGPU_MODEL_REVISION,
-    ZeroGPUBackend,
-)
+from src.config import ZEROGPU_MODEL_ID, ZEROGPU_MODEL_REVISION
+from src.generation.zerogpu_backend import ZeroGPUBackend
 
 
 @pytest.fixture
