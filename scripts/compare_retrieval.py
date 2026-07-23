@@ -4,13 +4,12 @@ import logging
 import sys
 from pathlib import Path
 
+from src.agent.tools import retrieve_hybrid
 from src.config import DEFAULT_RETRIEVAL_TOP_K
 from src.ingestion.embedder import Embedder
 from src.ingestion.indexer import BM25_DIRNAME, load_chroma_collection
 from src.retrieval.dense import query_dense
-from src.retrieval.hybrid import fuse_rrf
 from src.retrieval.rerank import Reranker
-from src.retrieval.sparse import query_sparse
 
 logger = logging.getLogger(__name__)
 
@@ -28,15 +27,14 @@ def compare_query(
     """Run one query through the dense-only and hybrid+rerank paths against a built index."""
     collection = load_chroma_collection(cache_dir)
     query_embedding = embedder.embed([query])[0]
-
     dense_only = query_dense(collection, query_embedding, top_k=top_k)
-    sparse = query_sparse(cache_dir / BM25_DIRNAME, collection, query, top_k=top_k)
-    fused = fuse_rrf(dense_only, sparse, top_k=top_k)
-    reranked = reranker.rerank(query, fused)
+    hybrid_reranked = retrieve_hybrid(
+        query, collection, cache_dir / BM25_DIRNAME, embedder, reranker, top_k=top_k
+    )
 
     return {
         "dense_only": [retrieved.chunk.qualified_name for retrieved in dense_only],
-        "hybrid_reranked": [retrieved.chunk.qualified_name for retrieved in reranked],
+        "hybrid_reranked": [retrieved.chunk.qualified_name for retrieved in hybrid_reranked],
     }
 
 

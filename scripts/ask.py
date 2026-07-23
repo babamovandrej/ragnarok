@@ -14,10 +14,7 @@ from src.generation.llm import LLMBackend
 from src.generation.prompts import render_prompt
 from src.ingestion.embedder import Embedder
 from src.ingestion.indexer import BM25_DIRNAME, load_chroma_collection
-from src.retrieval.dense import query_dense
-from src.retrieval.hybrid import fuse_rrf
 from src.retrieval.rerank import Reranker
-from src.retrieval.sparse import query_sparse
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +33,9 @@ def answer_question(
 ) -> tuple[str, list[Citation]]:
     """Retrieve context for question, generate an answer, and verify its citations."""
     collection = load_chroma_collection(cache_dir)
-    query_embedding = embedder.embed([question])[0]
-
-    dense = query_dense(collection, query_embedding, top_k=top_k)
-    sparse = query_sparse(cache_dir / BM25_DIRNAME, collection, question, top_k=top_k)
-    fused = fuse_rrf(dense, sparse, top_k=top_k)
-    context = reranker.rerank(question, fused)
+    context = retrieve_hybrid(
+        question, collection, cache_dir / BM25_DIRNAME, embedder, reranker, top_k=top_k
+    )
 
     prompt = render_prompt(question, context)
     answer = backend.generate(prompt, max_tokens=max_tokens)
