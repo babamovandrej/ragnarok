@@ -23,6 +23,14 @@ class Reranker:
         self._model: CrossEncoder = CrossEncoder(
             RERANK_MODEL_ID, revision=RERANK_MODEL_REVISION, device=device
         )
+        if next(self._model.model.parameters()).device.type == "cpu":
+            # float32 CPU matmul on this model's small (384-dim) hidden layers produces NaN
+            # logits on some platforms (confirmed: PyTorch 2.13.0 CPU on Apple Silicon, and
+            # this is the code path a CPU-only deployment always takes). float64 is a
+            # reliable, verified workaround with negligible cost given the model's tiny size.
+            # Skipped on non-CPU devices: MPS doesn't support float64 at all, and neither MPS
+            # nor CUDA showed this bug.
+            self._model.model = self._model.model.double()
         logger.info("Loaded rerank model in %.1fs", time.monotonic() - started)
 
     def rerank(self, query: str, candidates: list[RetrievedChunk]) -> list[RetrievedChunk]:
