@@ -158,3 +158,28 @@ def load_chroma_collection(cache_dir: Path) -> chromadb.Collection:
     """Load the persisted Chroma collection for a previously indexed repo."""
     client = chromadb.PersistentClient(path=str(cache_dir / CHROMA_DIRNAME))
     return client.get_collection(COLLECTION_NAME)
+
+
+def validate_cache_dir(cache_dir: Path) -> Path:
+    """Reject cache paths that resolve to obviously unsafe or shared filesystem locations."""
+    resolved = cache_dir.resolve()
+    unsafe = {Path("/"), Path.home().resolve(), Path.cwd().resolve()}
+    if resolved in unsafe:
+        raise ValueError(f"Refusing to use unsafe cache directory: {resolved}")
+    return resolved
+
+
+def ensure_disjoint(cache_dir: Path, repo_dir: Path) -> None:
+    """Reject configurations where the index cache and the repo directory would collide."""
+    cache_resolved = cache_dir.resolve()
+    repo_resolved = repo_dir.resolve()
+    overlaps = (
+        cache_resolved == repo_resolved
+        or cache_resolved in repo_resolved.parents
+        or repo_resolved in cache_resolved.parents
+    )
+    if overlaps:
+        raise ValueError(
+            f"Cache directory {cache_resolved} must not overlap "
+            f"with repository path {repo_resolved}"
+        )

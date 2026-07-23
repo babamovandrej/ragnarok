@@ -116,7 +116,7 @@ Fixed demo/eval repo: **`encode/starlette`**.
 
 8. **Incremental indexing** (`.github/workflows/reindex.yml`,
    `scripts/build_index.py --incremental`, `scripts/push_index_to_hub.py`) —
-   `build_index.py`'s `_merge_incremental_chunks` uses
+   `ingestion/incremental.py`'s `merge_incremental_chunks` uses
    `ingestion/clone.py`'s `changed_files_since` to re-chunk/re-embed only
    files changed since the cached manifest's `repo_sha`, reusing every
    other chunk's existing embedding straight from Chroma; `--incremental`
@@ -145,7 +145,7 @@ ragnarok/
 ├── src/
 │   ├── config.py                  # model IDs + pinned revisions, cache paths, caps
 │   ├── pipeline.py                # answer_ragnarok + compare(): orchestrates baseline + agent
-│   ├── ingestion/                 # clone.py, chunker.py, embedder.py, indexer.py, schemas.py
+│   ├── ingestion/                 # clone.py, chunker.py, embedder.py, indexer.py, incremental.py, schemas.py
 │   ├── retrieval/                 # dense.py, sparse.py, hybrid.py, rerank.py
 │   ├── agent/                     # state.py, tools.py, graph.py
 │   ├── generation/                # llm.py, zerogpu_backend.py, cpu_backend.py, prompts.py, citations.py

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 import chromadb.errors
@@ -11,8 +12,10 @@ from src.ingestion.indexer import (
     MANIFEST_FILENAME,
     IndexManifest,
     build_index,
+    ensure_disjoint,
     load_chroma_collection,
     load_manifest,
+    validate_cache_dir,
 )
 from src.ingestion.schemas import Chunk, SymbolType
 
@@ -288,3 +291,37 @@ class TestLoadChromaCollection:
     def test_raises_for_a_cache_dir_that_was_never_built(self, tmp_path):
         with pytest.raises(chromadb.errors.InvalidCollectionException):
             load_chroma_collection(tmp_path)
+
+
+class TestValidateCacheDir:
+    def test_rejects_root(self):
+        with pytest.raises(ValueError, match="unsafe"):
+            validate_cache_dir(Path("/"))
+
+    def test_rejects_home(self):
+        with pytest.raises(ValueError, match="unsafe"):
+            validate_cache_dir(Path.home())
+
+    def test_rejects_cwd(self):
+        with pytest.raises(ValueError, match="unsafe"):
+            validate_cache_dir(Path.cwd())
+
+    def test_accepts_a_normal_subdirectory(self, tmp_path):
+        assert validate_cache_dir(tmp_path / "cache") == (tmp_path / "cache").resolve()
+
+
+class TestEnsureDisjoint:
+    def test_rejects_identical_paths(self, tmp_path):
+        with pytest.raises(ValueError, match="overlap"):
+            ensure_disjoint(tmp_path, tmp_path)
+
+    def test_rejects_cache_dir_nested_inside_repo(self, tmp_path):
+        with pytest.raises(ValueError, match="overlap"):
+            ensure_disjoint(tmp_path / "repo" / "cache", tmp_path / "repo")
+
+    def test_rejects_repo_nested_inside_cache_dir(self, tmp_path):
+        with pytest.raises(ValueError, match="overlap"):
+            ensure_disjoint(tmp_path / "cache", tmp_path / "cache" / "repo")
+
+    def test_accepts_sibling_directories(self, tmp_path):
+        ensure_disjoint(tmp_path / "cache", tmp_path / "repo")

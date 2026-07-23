@@ -8,23 +8,19 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
-from chromadb.api.types import IncludeEnum
-
 from src.config import CACHE_ROOT, INDEX_SCHEMA_VERSION
-from src.ingestion.chunker import chunk_file, collect_chunks
+from src.ingestion.chunker import collect_chunks
 from src.ingestion.clone import (
     GitCommandError,
-    changed_files_since,
     current_sha,
     repo_name_from_url,
     repo_slug_from_url,
     shallow_clone,
 )
 from src.ingestion.embedder import Embedder
-from src.ingestion.indexer import build_index, load_chroma_collection, load_manifest
-from src.ingestion.schemas import Chunk, IngestionStats
-from src.retrieval.schemas import chunk_from_chroma_record
+from src.ingestion.incremental import merge_incremental_chunks
+from src.ingestion.indexer import build_index, ensure_disjoint, load_manifest, validate_cache_dir
+from src.ingestion.schemas import IngestionStats
 
 logger = logging.getLogger(__name__)
 
@@ -92,31 +88,6 @@ def _slug_from_local_path(repo_path: Path) -> str:
     return f"local/{safe_name or 'repo'}"
 
 
-def _validate_cache_dir(cache_dir: Path) -> Path:
-    """Reject cache paths that resolve to obviously unsafe or shared filesystem locations."""
-    resolved = cache_dir.resolve()
-    unsafe = {Path("/"), Path.home().resolve(), Path.cwd().resolve()}
-    if resolved in unsafe:
-        raise ValueError(f"Refusing to use unsafe cache directory: {resolved}")
-    return resolved
-
-
-def _ensure_disjoint(cache_dir: Path, repo_dir: Path) -> None:
-    """Reject configurations where the index cache and the repo directory would collide."""
-    cache_resolved = cache_dir.resolve()
-    repo_resolved = repo_dir.resolve()
-    overlaps = (
-        cache_resolved == repo_resolved
-        or cache_resolved in repo_resolved.parents
-        or repo_resolved in cache_resolved.parents
-    )
-    if overlaps:
-        raise ValueError(
-            f"Cache directory {cache_resolved} must not overlap "
-            f"with repository path {repo_resolved}"
-        )
-
-
 def _make_workspace(keep_clone: bool, repo_slug: str) -> Path:
     """Create a scratch directory to clone into; temporary unless keep_clone is set."""
     if keep_clone:
@@ -153,54 +124,6 @@ def _check_existing_index(
         f"An incompatible index already exists at {cache_dir} "
         f"(built for {existing.repo_slug}@{existing.repo_sha}); pass --rebuild to replace it."
     )
-
-
-def _merge_incremental_chunks(
-    cache_dir: Path, repo_dir: Path, since_sha: str, embedder: Embedder
-) -> tuple[list[Chunk], np.ndarray, IngestionStats]:
-    """Re-chunk/re-embed only files changed since since_sha; reuse existing chunks/embeddings."""
-    changed = changed_files_since(repo_dir, since_sha)
-    changed_paths = {c.path for c in changed}
-    changed_paths |= {c.previous_path for c in changed if c.previous_path}
-
-    collection = load_chroma_collection(cache_dir)
-    existing = collection.get(
-        include=[IncludeEnum.documents, IncludeEnum.metadatas, IncludeEnum.embeddings]
-    )
-    documents, metadatas = existing["documents"], existing["metadatas"]
-    assert documents is not None and metadatas is not None and existing["embeddings"] is not None
-    kept_chunks: list[Chunk] = []
-    kept_embeddings: list[list[float]] = []
-    for chunk_id, text, metadata, embedding in zip(
-        existing["ids"], documents, metadatas, existing["embeddings"]
-    ):
-        if metadata["file_path"] in changed_paths:
-            continue
-        kept_chunks.append(chunk_from_chroma_record(chunk_id, text, metadata))
-        kept_embeddings.append(embedding)
-
-    new_chunks: list[Chunk] = []
-    for changed_file in changed:
-        if changed_file.status.startswith("D"):
-            continue
-        new_chunks.extend(chunk_file(repo_dir / changed_file.path, repo_dir))
-
-    new_embeddings = embedder.embed([chunk.text for chunk in new_chunks]) if new_chunks else None
-
-    all_chunks = kept_chunks + new_chunks
-    if kept_embeddings and new_embeddings is not None:
-        all_embeddings = np.vstack([np.array(kept_embeddings), new_embeddings])
-    elif new_embeddings is not None:
-        all_embeddings = new_embeddings
-    else:
-        all_embeddings = np.array(kept_embeddings)
-
-    stats = IngestionStats(
-        files_scanned=len(changed),
-        files_chunked=len({cf.path for cf in changed if not cf.status.startswith("D")}),
-        chunks_created=len(new_chunks),
-    )
-    return all_chunks, all_embeddings, stats
 
 
 def ingest_repository(
@@ -248,10 +171,10 @@ def ingest_repository(
         else:
             raise ValueError("Provide exactly one of repo_url or repo_path.")
 
-        resolved_cache_dir = _validate_cache_dir(
+        resolved_cache_dir = validate_cache_dir(
             cache_dir if cache_dir is not None else CACHE_ROOT / repo_slug
         )
-        _ensure_disjoint(resolved_cache_dir, repo_dest)
+        ensure_disjoint(resolved_cache_dir, repo_dest)
         logger.info("Resolved %s to commit %s", repo_slug, repo_sha)
 
         if incremental:
@@ -281,7 +204,7 @@ def ingest_repository(
             chunk_started = time.perf_counter()
             try:
                 embedder = Embedder(device=device, batch_size=embedding_batch_size)
-                chunks, embeddings, stats = _merge_incremental_chunks(
+                chunks, embeddings, stats = merge_incremental_chunks(
                     resolved_cache_dir, repo_dest, existing_manifest.repo_sha, embedder
                 )
             except Exception as exc:
