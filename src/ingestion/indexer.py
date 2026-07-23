@@ -89,6 +89,8 @@ def build_index(
         _write_manifest(manifest, staging_dir / MANIFEST_FILENAME)
         _swap_in_place(staging_dir, cache_dir)
     except BaseException:
+        # Deliberately BaseException: staging_dir must never be left behind, even on
+        # KeyboardInterrupt/SystemExit, so this always cleans up before re-raising.
         shutil.rmtree(staging_dir, ignore_errors=True)
         raise
 
@@ -110,6 +112,8 @@ def _swap_in_place(staging_dir: Path, cache_dir: Path) -> None:
     try:
         staging_dir.rename(cache_dir)
     except BaseException:
+        # Deliberately BaseException: cache_dir must always end up in a valid state,
+        # even on KeyboardInterrupt/SystemExit, so this always restores it before re-raising.
         if previous_dir is not None:
             previous_dir.rename(cache_dir)
         raise

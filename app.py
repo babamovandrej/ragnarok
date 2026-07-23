@@ -1,3 +1,5 @@
+import logging
+
 import gradio as gr
 
 from scripts.build_index import ingest_repository
@@ -11,6 +13,8 @@ from src.retrieval.rerank import Reranker
 from src.ui.compare_view import build_compare_view
 from src.ui.ingest_view import build_ingest_view
 from src.utils.caching import LRUCache
+
+logger = logging.getLogger(__name__)
 
 DEMO_REPO_SLUG = repo_slug_from_url(DEMO_REPO_URL)
 DEMO_CACHE_DIR = CACHE_ROOT / DEMO_REPO_SLUG
@@ -42,6 +46,7 @@ def _ingest(repo_url: str) -> str:
     try:
         result = ingest_repository(repo_url)
     except Exception as exc:
+        logger.exception("Ingestion failed for %s", repo_url)
         return f"Ingestion failed: {exc}"
     return f"Indexed {result.repo_slug}@{result.repo_sha[:7]} — {result.chunk_count:,} chunks."
 

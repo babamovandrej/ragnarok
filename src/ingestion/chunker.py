@@ -446,6 +446,8 @@ def collect_chunks(repo_root: Path) -> tuple[list[Chunk], IngestionStats]:
                 stats.files_skipped += 1
                 continue
             except Exception:
+                # Deliberately broad: tree-sitter parsing across many languages and arbitrary
+                # repo content can raise almost anything; one bad file must not abort ingestion.
                 logger.warning("Skipping %s: unexpected chunking error", path, exc_info=True)
                 stats.parse_failures += 1
                 stats.files_skipped += 1
