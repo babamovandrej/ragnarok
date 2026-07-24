@@ -61,11 +61,9 @@ def _ingest(repo_url: str) -> str:
 with gr.Blocks(title="RAGnarok", theme=gr.themes.Soft()) as demo:
     with gr.Tabs():
         with gr.TabItem("Compare"):
-            build_compare_view(  # type: ignore[no-untyped-call]  # gradio ships no stub for Blocks.render
-                _demo_compare, repo_context=_demo_repo_context()
-            ).render()
+            build_compare_view(_demo_compare, repo_context=_demo_repo_context())
         with gr.TabItem("Ingest a repo"):
-            build_ingest_view(_ingest).render()  # type: ignore[no-untyped-call]  # gradio ships no stub for Blocks.render
+            build_ingest_view(_ingest)
 
 if __name__ == "__main__":
     demo.launch()
