@@ -11,7 +11,7 @@ from src.eval.metrics import idk_rate
 from src.eval.qa_dataset import QAItem, load_qa_dataset
 from src.eval.ragas_runner import run_ragas_eval
 from src.generation.cpu_backend import CPUBackend
-from src.generation.llm import LLMBackend
+from src.generation.llm import GenerationBackend
 from src.ingestion.embedder import Embedder
 from src.pipeline import answer_ragnarok
 from src.retrieval.rerank import Reranker
@@ -29,7 +29,7 @@ def run_pipeline_eval(
     cache_dir: Path,
     embedder: Embedder,
     reranker: Reranker,
-    backend: LLMBackend,
+    backend: GenerationBackend,
     top_k: int,
 ) -> tuple[EvaluationResult, float]:
     """Answer every QA item with the full RAGnarok pipeline; score with RAGAS + adversarial IDK."""

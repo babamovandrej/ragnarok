@@ -31,7 +31,7 @@ class TestMergeIncrementalChunks:
         _run("git", "commit", "-q", "-m", "first", cwd=repo)
         first_sha = current_sha(repo)
 
-        initial_chunks, _ = collect_chunks(repo)
+        initial_chunks, _ = collect_chunks(repo, first_sha)
         initial_embeddings = np.array(
             [[float(i), 0.0, 0.0, 0.0] for i in range(len(initial_chunks))], dtype=np.float32
         )
@@ -48,6 +48,7 @@ class TestMergeIncrementalChunks:
         (repo / "a.py").write_text("def foo():\n    return 999\n")
         _run("git", "add", "-A", cwd=repo)
         _run("git", "commit", "-q", "-m", "second", cwd=repo)
+        second_sha = current_sha(repo)
 
         class _TrackingEmbedder:
             def __init__(self) -> None:
@@ -59,7 +60,7 @@ class TestMergeIncrementalChunks:
 
         embedder = _TrackingEmbedder()
         merged_chunks, merged_embeddings, stats = merge_incremental_chunks(
-            cache_dir, repo, first_sha, embedder
+            cache_dir, repo, first_sha, embedder, second_sha
         )
 
         merged_by_file = dict(zip((c.file_path for c in merged_chunks), merged_embeddings))
@@ -70,6 +71,10 @@ class TestMergeIncrementalChunks:
         all_embedded_texts = [text for call in embedder.embed_calls for text in call]
         assert not any("bar" in text for text in all_embedded_texts)
         assert any("999" in text for text in all_embedded_texts)
+
+        merged_by_file_chunk = {c.file_path: c for c in merged_chunks}
+        assert merged_by_file_chunk["a.py"].repo_sha == second_sha
+        assert merged_by_file_chunk["b.py"].repo_sha == first_sha
 
     def test_deleted_file_is_dropped_entirely(self, tmp_path):
         repo = tmp_path / "repo"
@@ -83,7 +88,7 @@ class TestMergeIncrementalChunks:
         _run("git", "commit", "-q", "-m", "first", cwd=repo)
         first_sha = current_sha(repo)
 
-        initial_chunks, _ = collect_chunks(repo)
+        initial_chunks, _ = collect_chunks(repo, first_sha)
         initial_embeddings = np.array(
             [[float(i), 0.0, 0.0, 0.0] for i in range(len(initial_chunks))], dtype=np.float32
         )
@@ -95,9 +100,10 @@ class TestMergeIncrementalChunks:
         (repo / "b.py").unlink()
         _run("git", "add", "-A", cwd=repo)
         _run("git", "commit", "-q", "-m", "delete b", cwd=repo)
+        second_sha = current_sha(repo)
 
         merged_chunks, _, stats = merge_incremental_chunks(
-            cache_dir, repo, first_sha, _FakeEmbedder()
+            cache_dir, repo, first_sha, _FakeEmbedder(), second_sha
         )
 
         assert {c.file_path for c in merged_chunks} == {"a.py"}

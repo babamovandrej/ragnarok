@@ -29,6 +29,7 @@ def _fake_chunk(
     qualified_name: str | None = None,
     symbol_type: SymbolType = "method",
     language: SupportedLanguage = "python",
+    repo_sha: str = "sha1",
 ) -> Chunk:
     return Chunk(
         chunk_id=f"a.py:{name}",
@@ -39,6 +40,7 @@ def _fake_chunk(
         qualified_name=qualified_name if qualified_name is not None else f"Example.{name}",
         symbol_type=symbol_type,
         language=language,
+        repo_sha=repo_sha,
         text=f"def {name}():\n    pass",
     )
 
@@ -97,6 +99,7 @@ class TestBuildIndex:
             qualified_name="Example.foo",
             symbol_type="method",
             language="python",
+            repo_sha="sha1",
         )
         embeddings = np.random.default_rng(0).random((1, 4), dtype=np.float32)
 
@@ -114,6 +117,8 @@ class TestBuildIndex:
             "qualified_name": "Example.foo",
             "symbol_type": "method",
             "language": "python",
+            "repo_sha": "sha1",
+            "imports": "",
         }
 
     def test_is_idempotent_and_drops_stale_chunks(self, tmp_path):
@@ -285,6 +290,45 @@ class TestIndexManifestCompatibility:
     def test_incompatible_on_different_embedding_model_revision(self):
         manifest = self._manifest(embedding_model_revision="deadbeef")
         assert not manifest.is_compatible_with("a/b", "sha1")
+
+
+class TestHasCompatibleEmbeddingSetup:
+    def _manifest(
+        self,
+        *,
+        schema_version: int = INDEX_SCHEMA_VERSION,
+        embedding_model_id: str = EMBEDDING_MODEL_ID,
+        embedding_model_revision: str = EMBEDDING_MODEL_REVISION,
+    ) -> IndexManifest:
+        return IndexManifest(
+            repo_slug="a/b",
+            repo_sha="sha1",
+            schema_version=schema_version,
+            embedding_model_id=embedding_model_id,
+            embedding_model_revision=embedding_model_revision,
+            chunk_count=1,
+            embedding_dimension=4,
+        )
+
+    def test_compatible_when_embedding_setup_matches(self):
+        assert self._manifest().has_compatible_embedding_setup()
+
+    def test_compatible_regardless_of_repo_sha(self):
+        manifest = self._manifest()
+        assert manifest.has_compatible_embedding_setup()
+        assert not manifest.is_compatible_with("a/b", "a-completely-different-sha")
+
+    def test_incompatible_on_different_embedding_model_id(self):
+        manifest = self._manifest(embedding_model_id="other/model")
+        assert not manifest.has_compatible_embedding_setup()
+
+    def test_incompatible_on_different_embedding_model_revision(self):
+        manifest = self._manifest(embedding_model_revision="deadbeef")
+        assert not manifest.has_compatible_embedding_setup()
+
+    def test_incompatible_on_different_schema_version(self):
+        manifest = self._manifest(schema_version=INDEX_SCHEMA_VERSION + 1)
+        assert not manifest.has_compatible_embedding_setup()
 
 
 class TestLoadChromaCollection:

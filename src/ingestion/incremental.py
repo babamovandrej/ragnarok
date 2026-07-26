@@ -12,9 +12,14 @@ from src.retrieval.schemas import chunk_from_chroma_record
 
 
 def merge_incremental_chunks(
-    cache_dir: Path, repo_dir: Path, since_sha: str, embedder: Embedder
+    cache_dir: Path, repo_dir: Path, since_sha: str, embedder: Embedder, new_sha: str
 ) -> tuple[list[Chunk], np.ndarray, IngestionStats]:
-    """Re-chunk/re-embed only files changed since since_sha; reuse existing chunks/embeddings."""
+    """Re-chunk/re-embed only files changed since since_sha; reuse existing chunks/embeddings.
+
+    Reused chunks keep whatever repo_sha they were originally embedded at (read back from
+    Chroma metadata); only freshly re-chunked files are stamped with new_sha, so a chunk's
+    repo_sha always reflects the commit its own content actually came from.
+    """
     changed = changed_files_since(repo_dir, since_sha)
     changed_paths = {c.path for c in changed}
     changed_paths |= {c.previous_path for c in changed if c.previous_path}
@@ -33,13 +38,13 @@ def merge_incremental_chunks(
         if metadata["file_path"] in changed_paths:
             continue
         kept_chunks.append(chunk_from_chroma_record(chunk_id, text, metadata))
-        kept_embeddings.append(embedding)
+        kept_embeddings.append(list(embedding))
 
     new_chunks: list[Chunk] = []
     for changed_file in changed:
         if changed_file.status.startswith("D"):
             continue
-        new_chunks.extend(chunk_file(repo_dir / changed_file.path, repo_dir))
+        new_chunks.extend(chunk_file(repo_dir / changed_file.path, repo_dir, new_sha))
 
     new_embeddings = embedder.embed([chunk.text for chunk in new_chunks]) if new_chunks else None
 

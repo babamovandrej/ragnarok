@@ -5,7 +5,12 @@ from langchain_core.callbacks import Callbacks
 from langchain_core.outputs import Generation, LLMResult
 from langchain_core.prompt_values import PromptValue
 from ragas import evaluate
-from ragas.dataset_schema import EvaluationDataset, EvaluationResult, SingleTurnSample
+from ragas.dataset_schema import (
+    EvaluationDataset,
+    EvaluationResult,
+    SingleTurnSample,
+    SingleTurnSampleOrMultiTurnSample,
+)
 from ragas.llms.base import BaseRagasLLM
 from ragas.metrics import Faithfulness, LLMContextPrecisionWithoutReference, LLMContextRecall
 
@@ -56,7 +61,7 @@ def run_ragas_eval(
     backend: LLMBackend,
 ) -> EvaluationResult:
     """Score each (question, generated answer, retrieved context) triple with RAGAS metrics."""
-    samples = [
+    samples: list[SingleTurnSampleOrMultiTurnSample] = [
         SingleTurnSample(user_input=item.question, response=answer, retrieved_contexts=context)
         for item, answer, context in zip(qa_items, answers, contexts)
     ]

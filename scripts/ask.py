@@ -10,8 +10,8 @@ from src.agent.tools import find_symbol_definition, retrieve_hybrid
 from src.config import DEFAULT_RETRIEVAL_TOP_K, GENERATION_MAX_TOKENS_DEFAULT
 from src.generation.citations import Citation, verify_citations
 from src.generation.cpu_backend import CPUBackend
-from src.generation.llm import LLMBackend
-from src.generation.prompts import render_prompt
+from src.generation.llm import GenerationBackend
+from src.generation.prompts import fit_chunks_to_budget, render_prompt
 from src.ingestion.embedder import Embedder
 from src.ingestion.indexer import BM25_DIRNAME, load_chroma_collection
 from src.retrieval.rerank import Reranker
@@ -27,7 +27,7 @@ def answer_question(
     cache_dir: Path,
     embedder: Embedder,
     reranker: Reranker,
-    backend: LLMBackend,
+    backend: GenerationBackend,
     top_k: int,
     max_tokens: int,
 ) -> tuple[str, list[Citation]]:
@@ -37,7 +37,8 @@ def answer_question(
         question, collection, cache_dir / BM25_DIRNAME, embedder, reranker, top_k=top_k
     )
 
-    prompt = render_prompt(question, context)
+    fitted_context = fit_chunks_to_budget(question, context, backend, max_tokens)
+    prompt = render_prompt(question, fitted_context)
     answer = backend.generate(prompt, max_tokens=max_tokens)
     citations = verify_citations(answer, [retrieved.chunk for retrieved in context])
     return answer, citations
@@ -48,7 +49,7 @@ def answer_question_with_agent(
     cache_dir: Path,
     embedder: Embedder,
     reranker: Reranker,
-    backend: LLMBackend,
+    backend: GenerationBackend,
     top_k: int,
 ) -> tuple[str, list[Citation], list[HopRecord]]:
     """Answer question via the multi-hop agent graph; returns the answer, citations, hop path."""

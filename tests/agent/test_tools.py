@@ -18,6 +18,7 @@ def _fake_chunk(name: str, text: str, file_path: str = "a.py") -> Chunk:
         qualified_name=name,
         symbol_type="function",
         language="python",
+        repo_sha="sha1",
         text=text,
     )
 
@@ -72,3 +73,38 @@ class TestRetrieveHybrid:
         )
 
         assert {r.chunk.symbol_name for r in results} == {"AuthenticationMiddleware", "add"}
+
+
+class _RaisingCollection:
+    """A chromadb.Collection stand-in that always fails, for tool-call failure-path tests.
+
+    tools.py deliberately has no try/except of its own — graph.py's retrieve_node/
+    follow_symbol_node are what catch and degrade (see task 03) — so these confirm the
+    exception actually propagates up to that boundary instead of being silently swallowed
+    somewhere in between.
+    """
+
+    def get(self, *args, **kwargs):
+        raise RuntimeError("chroma unavailable")
+
+    def query(self, *args, **kwargs):
+        raise RuntimeError("chroma unavailable")
+
+
+class TestFindSymbolDefinitionErrorHandling:
+    def test_propagates_a_collection_failure_instead_of_swallowing_it(self):
+        with pytest.raises(RuntimeError, match="chroma unavailable"):
+            find_symbol_definition("AnySymbol", _RaisingCollection())
+
+
+class TestRetrieveHybridErrorHandling:
+    def test_propagates_a_collection_failure_instead_of_swallowing_it(self, tmp_path):
+        with pytest.raises(RuntimeError, match="chroma unavailable"):
+            retrieve_hybrid(
+                "query",
+                _RaisingCollection(),
+                tmp_path,
+                _FakeEmbedder(),
+                _FakeReranker(),
+                top_k=2,
+            )

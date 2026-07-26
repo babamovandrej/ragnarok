@@ -19,6 +19,7 @@ def _fake_chunk(name: str, text: str, file_path: str = "a.py") -> Chunk:
         qualified_name=name,
         symbol_type="function",
         language="python",
+        repo_sha="sha1",
         text=text,
     )
 

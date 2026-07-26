@@ -18,6 +18,7 @@ def _fake_chunk(name: str, text: str, file_path: str = "a.py") -> Chunk:
         qualified_name=name,
         symbol_type="function",
         language="python",
+        repo_sha="sha1",
         text=text,
     )
 
@@ -35,9 +36,14 @@ class _FakeReranker:
 class _ScriptedBackend:
     """Answers agent decide-more-hops prompts from a script, and every other prompt with answer."""
 
+    context_window = 100_000
+
     def __init__(self, decisions: list[str], answer: str) -> None:
         self._decisions = iter(decisions)
         self.answer = answer
+
+    def count_tokens(self, text: str) -> int:
+        return len(text.split())
 
     def generate(self, prompt: str, max_tokens: int) -> str:
         if "Reply:" in prompt:
@@ -86,6 +92,27 @@ class TestAnswerRagnarok:
         )
 
         assert result.hop_path == []
+
+    def test_logs_and_reraises_when_the_graph_fails_to_answer(self, cache_dir, caplog):
+        class _BrokenBackend(_ScriptedBackend):
+            def generate(self, prompt: str, max_tokens: int) -> str:
+                if "Reply:" in prompt:
+                    return "DONE"
+                raise RuntimeError("model crashed")
+
+        backend = _BrokenBackend([], "unused")
+
+        with caplog.at_level("ERROR"), pytest.raises(RuntimeError, match="model crashed"):
+            answer_ragnarok(
+                "how is auth handled?",
+                cache_dir,
+                _FakeEmbedder(),
+                _FakeReranker(),
+                backend,
+                top_k=2,
+            )
+
+        assert "RAGnarok pipeline failed" in caplog.text
 
 
 class TestCompare:

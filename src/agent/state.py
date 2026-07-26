@@ -24,4 +24,5 @@ class AgentState(BaseModel):
     hop_path: list[HopRecord] = Field(default_factory=list)
     hops_remaining: int = AGENT_MAX_HOPS
     pending_symbol: str | None = None
+    pending_reason: str | None = None
     answer: str | None = None

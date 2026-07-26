@@ -37,6 +37,14 @@ class CPUBackend:
         )
         logger.info("Loaded CPU generation model in %.1fs", time.monotonic() - started)
 
+    @property
+    def context_window(self) -> int:
+        return GENERATION_CONTEXT_WINDOW
+
+    def count_tokens(self, text: str) -> int:
+        """Count tokens using this backend's own loaded tokenizer (llama.cpp's BPE vocab)."""
+        return len(self._model.tokenize(text.encode("utf-8")))
+
     def generate(self, prompt: str, max_tokens: int = GENERATION_MAX_TOKENS_DEFAULT) -> str:
         """Generate a chat completion for prompt, capped at max_tokens output tokens."""
         response = cast(

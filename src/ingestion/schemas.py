@@ -16,7 +16,9 @@ class Chunk:
     qualified_name: str
     symbol_type: SymbolType
     language: SupportedLanguage
+    repo_sha: str
     text: str
+    imports: str = ""
 
 
 @dataclass
@@ -27,3 +29,4 @@ class IngestionStats:
     decode_failures: int = 0
     parse_failures: int = 0
     chunks_created: int = 0
+    truncated: bool = False

@@ -22,6 +22,8 @@ def export_chunks_to_parquet(
             "qualified_name": [c.qualified_name for c in chunks],
             "symbol_type": [c.symbol_type for c in chunks],
             "language": [c.language for c in chunks],
+            "repo_sha": [c.repo_sha for c in chunks],
+            "imports": [c.imports for c in chunks],
             "text": [c.text for c in chunks],
             "embedding": [embedding.tolist() for embedding in embeddings],
         }
@@ -47,10 +49,19 @@ def latest_commit_sha(repo_id: str) -> str:
     return sha
 
 
-def pull_parquet(repo_id: str, filename: str, local_dir: Path) -> Path:
-    """Download one parquet file from a Hugging Face Dataset repo into local_dir."""
+def pull_parquet(repo_id: str, filename: str, local_dir: Path, revision: str) -> Path:
+    """Download one parquet file from a Hugging Face Dataset repo into local_dir.
+
+    revision pins the exact commit to download from — without it, a push to repo_id between
+    refresh_if_stale resolving remote_sha and this download actually happening could silently
+    fetch a newer revision than the one every other caller believes it just rehydrated from.
+    """
     downloaded = hf_hub_download(
-        repo_id=repo_id, filename=filename, repo_type="dataset", local_dir=str(local_dir)
+        repo_id=repo_id,
+        filename=filename,
+        repo_type="dataset",
+        revision=revision,
+        local_dir=str(local_dir),
     )
     return Path(downloaded)
 
@@ -70,7 +81,9 @@ def rehydrate_index_from_parquet(
             qualified_name=row["qualified_name"],
             symbol_type=row["symbol_type"],
             language=row["language"],
+            repo_sha=row["repo_sha"],
             text=row["text"],
+            imports=row.get("imports", ""),
         )
         for row in rows
     ]
@@ -84,6 +97,6 @@ def refresh_if_stale(repo_id: str, cache_dir: Path, repo_slug: str) -> bool:
     local_manifest = load_manifest(cache_dir)
     if local_manifest is not None and local_manifest.repo_sha == remote_sha:
         return False
-    parquet_path = pull_parquet(repo_id, f"{remote_sha}.parquet", cache_dir)
+    parquet_path = pull_parquet(repo_id, f"{remote_sha}.parquet", cache_dir, revision=remote_sha)
     rehydrate_index_from_parquet(parquet_path, cache_dir, repo_slug, remote_sha)
     return True

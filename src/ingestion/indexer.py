@@ -34,14 +34,24 @@ class IndexManifest:
     chunk_count: int
     embedding_dimension: int
 
+    def has_compatible_embedding_setup(self) -> bool:
+        """Check whether this manifest's schema/embedding model still matches current config.
+
+        Independent of repo/commit identity — used by incremental indexing, which updates
+        repo_sha by design and must not conflate "different commit" with "different model."
+        """
+        return (
+            self.schema_version == INDEX_SCHEMA_VERSION
+            and self.embedding_model_id == EMBEDDING_MODEL_ID
+            and self.embedding_model_revision == EMBEDDING_MODEL_REVISION
+        )
+
     def is_compatible_with(self, repo_slug: str, repo_sha: str) -> bool:
         """Check whether a cached index still matches the given repo/commit and embedding setup."""
         return (
             self.repo_slug == repo_slug
             and self.repo_sha == repo_sha
-            and self.schema_version == INDEX_SCHEMA_VERSION
-            and self.embedding_model_id == EMBEDDING_MODEL_ID
-            and self.embedding_model_revision == EMBEDDING_MODEL_REVISION
+            and self.has_compatible_embedding_setup()
         )
 
 
@@ -131,6 +141,8 @@ def _chunk_metadata(chunk: Chunk) -> dict[str, str | int]:
         "qualified_name": chunk.qualified_name,
         "symbol_type": chunk.symbol_type,
         "language": chunk.language,
+        "repo_sha": chunk.repo_sha,
+        "imports": chunk.imports,
     }
 
 

@@ -24,6 +24,7 @@ def _fake_chunk(name: str, text: str, file_path: str = "a.py") -> Chunk:
         qualified_name=name,
         symbol_type="function",
         language="python",
+        repo_sha="sha1",
         text=text,
     )
 
@@ -39,6 +40,7 @@ def test_export_chunks_to_parquet_has_expected_columns(tmp_path):
             qualified_name="foo",
             symbol_type="function",
             language="python",
+            repo_sha="sha1",
             text="def foo():\n    pass",
         )
     ]
@@ -57,6 +59,8 @@ def test_export_chunks_to_parquet_has_expected_columns(tmp_path):
         "qualified_name",
         "symbol_type",
         "language",
+        "repo_sha",
+        "imports",
         "text",
         "embedding",
     ]
@@ -78,13 +82,14 @@ class TestPullParquet:
         with patch("src.utils.hf_dataset_io.hf_hub_download") as mock_download:
             mock_download.return_value = str(tmp_path / "abc123.parquet")
 
-            result = pull_parquet("owner/dataset", "abc123.parquet", tmp_path)
+            result = pull_parquet("owner/dataset", "abc123.parquet", tmp_path, revision="abc123")
 
             assert result == tmp_path / "abc123.parquet"
             mock_download.assert_called_once_with(
                 repo_id="owner/dataset",
                 filename="abc123.parquet",
                 repo_type="dataset",
+                revision="abc123",
                 local_dir=str(tmp_path),
             )
 
@@ -140,11 +145,14 @@ class TestRefreshIfStale:
 
         with (
             patch("src.utils.hf_dataset_io.latest_commit_sha", return_value="new-sha"),
-            patch("src.utils.hf_dataset_io.pull_parquet", return_value=parquet_path),
+            patch("src.utils.hf_dataset_io.pull_parquet", return_value=parquet_path) as mock_pull,
         ):
             refreshed = refresh_if_stale("owner/dataset", cache_dir, "owner/repo")
 
         assert refreshed is True
+        mock_pull.assert_called_once_with(
+            "owner/dataset", "new-sha.parquet", cache_dir, revision="new-sha"
+        )
         manifest = load_manifest(cache_dir)
         assert manifest.repo_sha == "new-sha"
         assert manifest.chunk_count == 2

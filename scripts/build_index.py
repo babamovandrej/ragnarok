@@ -184,6 +184,15 @@ def ingest_repository(
                     f"No existing index at {resolved_cache_dir} to update incrementally; "
                     "run a full build first."
                 )
+            if not existing_manifest.has_compatible_embedding_setup():
+                raise IncompatibleCacheError(
+                    f"Index at {resolved_cache_dir} was built with a different embedding model "
+                    f"or schema version (embedding_model_id="
+                    f"{existing_manifest.embedding_model_id}, embedding_model_revision="
+                    f"{existing_manifest.embedding_model_revision}, schema_version="
+                    f"{existing_manifest.schema_version}); incremental updates would silently "
+                    "mix stale and fresh vectors. Pass --rebuild for a full rebuild instead."
+                )
             if existing_manifest.repo_sha == repo_sha:
                 logger.info("Index for %s@%s is already up to date; skipping", repo_slug, repo_sha)
                 return IngestionResult(
@@ -205,7 +214,7 @@ def ingest_repository(
             try:
                 embedder = Embedder(device=device, batch_size=embedding_batch_size)
                 chunks, embeddings, stats = merge_incremental_chunks(
-                    resolved_cache_dir, repo_dest, existing_manifest.repo_sha, embedder
+                    resolved_cache_dir, repo_dest, existing_manifest.repo_sha, embedder, repo_sha
                 )
             except Exception as exc:
                 raise EmbeddingFailedError(
@@ -228,7 +237,7 @@ def ingest_repository(
                     return skip_result
 
             chunk_started = time.perf_counter()
-            chunks, stats = collect_chunks(repo_dest)
+            chunks, stats = collect_chunks(repo_dest, repo_sha)
             chunk_seconds = time.perf_counter() - chunk_started
             logger.info(
                 "Chunked %s: %d chunk(s) from %d file(s) (%d skipped)",

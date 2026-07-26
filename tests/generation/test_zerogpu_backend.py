@@ -57,3 +57,17 @@ class TestZeroGPUBackend:
         assert result == "the answer"
         generate_mock = mock_model.from_pretrained.return_value.to.return_value.generate
         assert generate_mock.call_args.kwargs["max_new_tokens"] == 16
+
+    def test_context_window_reads_the_models_own_config(self, mock_tokenizer, mock_model):
+        moved_model = mock_model.from_pretrained.return_value.to.return_value
+        moved_model.config.max_position_embeddings = 32768
+        backend = ZeroGPUBackend()
+
+        assert backend.context_window == 32768
+
+    def test_count_tokens_delegates_to_the_loaded_tokenizer(self, mock_tokenizer, mock_model):
+        mock_tokenizer.from_pretrained.return_value.encode.return_value = [1, 2, 3]
+        backend = ZeroGPUBackend()
+
+        assert backend.count_tokens("some text") == 3
+        mock_tokenizer.from_pretrained.return_value.encode.assert_called_once_with("some text")

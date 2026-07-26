@@ -20,7 +20,10 @@ def chunk_from_chroma_record(chunk_id: str, text: str, metadata: Metadata) -> Ch
 
     Chroma's metadata values are typed as the wide `str | int | float | bool` union; the
     conversions below are safe no-ops in practice since our own indexer only ever writes
-    str/int values, narrowed here to the precise types `Chunk` declares.
+    str/int values, narrowed here to the precise types `Chunk` declares. `imports` reads via
+    `.get` with a "" default (unlike the other, schema-version-gated fields) since it's a
+    purely additive prompt-context enhancement (task 10) — an index built before it existed
+    should degrade to no import context, not be rejected as incompatible.
     """
     return Chunk(
         chunk_id=chunk_id,
@@ -31,5 +34,7 @@ def chunk_from_chroma_record(chunk_id: str, text: str, metadata: Metadata) -> Ch
         qualified_name=str(metadata["qualified_name"]),
         symbol_type=cast(SymbolType, metadata["symbol_type"]),
         language=cast(SupportedLanguage, metadata["language"]),
+        repo_sha=str(metadata["repo_sha"]),
         text=text,
+        imports=str(metadata.get("imports", "")),
     )

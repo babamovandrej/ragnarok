@@ -9,7 +9,7 @@ from src.baseline.naive_rag import answer_naive
 from src.baseline.schemas import PipelineResult
 from src.config import AGENT_MAX_HOPS, DEFAULT_RETRIEVAL_TOP_K
 from src.generation.citations import verify_citations
-from src.generation.llm import LLMBackend
+from src.generation.llm import GenerationBackend
 from src.ingestion.embedder import Embedder
 from src.ingestion.indexer import BM25_DIRNAME, load_chroma_collection
 from src.retrieval.rerank import Reranker
@@ -22,7 +22,7 @@ def answer_ragnarok(
     cache_dir: Path,
     embedder: Embedder,
     reranker: Reranker,
-    backend: LLMBackend,
+    backend: GenerationBackend,
     top_k: int = DEFAULT_RETRIEVAL_TOP_K,
     max_hops: int = AGENT_MAX_HOPS,
 ) -> PipelineResult:
@@ -42,7 +42,11 @@ def answer_ragnarok(
         decide_more_hops=partial(llm_decide_more_hops, backend),
         backend=backend,
     )
-    result = graph.invoke(AgentState(question=question, hops_remaining=max_hops))
+    try:
+        result = graph.invoke(AgentState(question=question, hops_remaining=max_hops))
+    except Exception:
+        logger.exception("RAGnarok pipeline failed to generate an answer for %r", question)
+        raise
     citations = verify_citations(result["answer"], [c.chunk for c in result["context"]])
     hop_path = result.get("hop_path", [])
     logger.info("RAGnarok pipeline answered with %d hop(s)", len(hop_path))
@@ -60,7 +64,7 @@ def compare(
     cache_dir: Path,
     embedder: Embedder,
     reranker: Reranker,
-    backend: LLMBackend,
+    backend: GenerationBackend,
     top_k: int = DEFAULT_RETRIEVAL_TOP_K,
 ) -> tuple[PipelineResult, PipelineResult]:
     """Run question through both pipelines in parallel intent; returns (naive, ragnarok)."""

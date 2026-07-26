@@ -8,7 +8,7 @@ from src.baseline.schemas import PipelineResult
 from src.config import DEFAULT_RETRIEVAL_TOP_K
 from src.eval.qa_dataset import QAItem
 from src.eval.ragas_runner import run_ragas_eval
-from src.generation.llm import LLMBackend
+from src.generation.llm import GenerationBackend
 from src.ingestion.embedder import Embedder
 from src.pipeline import answer_ragnarok
 from src.retrieval.rerank import Reranker
@@ -34,7 +34,7 @@ def _run_pipeline(
     cache_dir: Path,
     embedder: Embedder,
     reranker: Reranker,
-    backend: LLMBackend,
+    backend: GenerationBackend,
     top_k: int,
 ) -> PipelineResult:
     """Answer one question through the requested ablation arm."""
@@ -52,7 +52,7 @@ def run_ablation(
     cache_dir: Path,
     embedder: Embedder,
     reranker: Reranker,
-    backend: LLMBackend,
+    backend: GenerationBackend,
     top_k: int = DEFAULT_RETRIEVAL_TOP_K,
 ) -> list[AblationRow]:
     """Run the same Q&A set through naive / hybrid+rerank (0 hops) / full multi-hop pipelines."""

@@ -26,6 +26,7 @@ def _fake_chunk(name: str, text: str, file_path: str = "a.py") -> Chunk:
         qualified_name=name,
         symbol_type="function",
         language="python",
+        repo_sha="sha1",
         text=text,
     )
 
@@ -44,9 +45,14 @@ class _FakeReranker:
 
 
 class _FakeBackend:
+    context_window = 100_000
+
     def __init__(self, response: str) -> None:
         self.response = response
         self.calls: list[tuple[str, int]] = []
+
+    def count_tokens(self, text: str) -> int:
+        return len(text.split())
 
     def generate(self, prompt: str, max_tokens: int) -> str:
         self.calls.append((prompt, max_tokens))
@@ -56,9 +62,14 @@ class _FakeBackend:
 class _ScriptedAgentBackend:
     """Answers agent decide-more-hops prompts from a script, and every other prompt with answer."""
 
+    context_window = 100_000
+
     def __init__(self, decisions: list[str], answer: str) -> None:
         self._decisions = iter(decisions)
         self.answer = answer
+
+    def count_tokens(self, text: str) -> int:
+        return len(text.split())
 
     def generate(self, prompt: str, max_tokens: int) -> str:
         if "Reply:" in prompt:

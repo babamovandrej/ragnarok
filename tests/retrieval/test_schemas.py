@@ -15,6 +15,7 @@ class TestChunkFromChromaRecord:
             "qualified_name": "Example.foo",
             "symbol_type": "method",
             "language": "python",
+            "repo_sha": "sha1",
         }
 
         chunk = chunk_from_chroma_record("chunk-1", "def foo():\n    pass", metadata)
@@ -27,7 +28,45 @@ class TestChunkFromChromaRecord:
         assert chunk.qualified_name == "Example.foo"
         assert chunk.symbol_type == "method"
         assert chunk.language == "python"
+        assert chunk.repo_sha == "sha1"
         assert chunk.text == "def foo():\n    pass"
+        assert chunk.imports == ""
+
+    def test_reads_imports_when_present_in_metadata(self):
+        metadata = {
+            "file_path": "pkg/mod.py",
+            "start_line": 10,
+            "end_line": 20,
+            "symbol_name": "foo",
+            "qualified_name": "Example.foo",
+            "symbol_type": "method",
+            "language": "python",
+            "repo_sha": "sha1",
+            "imports": "import os",
+        }
+
+        chunk = chunk_from_chroma_record("chunk-1", "def foo():\n    pass", metadata)
+
+        assert chunk.imports == "import os"
+
+    def test_defaults_imports_to_empty_string_for_an_index_built_before_task_10(self):
+        """An index built before Chunk.imports existed has no "imports" key at all —
+        this must degrade gracefully (no imports shown), not KeyError like the repo_sha
+        field does (repo_sha is schema-version-gated; imports deliberately isn't)."""
+        metadata = {
+            "file_path": "pkg/mod.py",
+            "start_line": 10,
+            "end_line": 20,
+            "symbol_name": "foo",
+            "qualified_name": "Example.foo",
+            "symbol_type": "method",
+            "language": "python",
+            "repo_sha": "sha1",
+        }
+
+        chunk = chunk_from_chroma_record("chunk-1", "def foo():\n    pass", metadata)
+
+        assert chunk.imports == ""
 
 
 class TestRetrievedChunk:
@@ -44,6 +83,7 @@ class TestRetrievedChunk:
                     "qualified_name": "foo",
                     "symbol_type": "function",
                     "language": "python",
+                    "repo_sha": "sha1",
                 },
             ),
             score=0.5,

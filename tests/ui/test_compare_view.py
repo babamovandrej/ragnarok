@@ -5,6 +5,8 @@ from src.agent.state import HopRecord
 from src.baseline.schemas import PipelineResult
 from src.generation.citations import Citation
 from src.ui.compare_view import (
+    _format_active_repo_label,
+    _format_backend_status,
     _format_naive,
     _format_ragnarok,
     _render_citations,
@@ -82,39 +84,83 @@ class TestFormatRagnarok:
         assert "https://github.com/owner/repo/blob/sha123/a.py#L1-L2" in formatted
 
 
+class TestFormatBackendStatus:
+    def test_returns_empty_string_when_backend_is_unknown(self):
+        assert _format_backend_status(None) == ""
+
+    def test_mentions_zerogpu_for_the_primary_backend(self):
+        assert "ZeroGPU" in _format_backend_status("primary")
+
+    def test_mentions_cpu_fallback_for_the_fallback_backend(self):
+        assert "CPU fallback" in _format_backend_status("fallback")
+
+
+class TestFormatActiveRepoLabel:
+    def test_includes_the_repo_slug(self):
+        assert "owner/repo" in _format_active_repo_label("owner/repo")
+
+
 class TestRenderComparison:
     def test_returns_formatted_naive_and_ragnarok_columns_in_order(self):
-        def fake_compare(question: str) -> tuple[PipelineResult, PipelineResult]:
-            return _naive_result(f"naive: {question}"), _ragnarok_result(f"ragnarok: {question}")
+        def fake_compare(repo_slug: str, question: str):
+            return (
+                _naive_result(f"naive: {question}"),
+                _ragnarok_result(f"ragnarok: {question}"),
+                "primary",
+                (repo_slug, "sha1"),
+            )
 
-        naive_text, ragnarok_text = render_comparison(fake_compare, "how is auth handled?")
+        naive_text, ragnarok_text, backend_status = render_comparison(
+            fake_compare, "owner/repo", "how is auth handled?"
+        )
 
         assert naive_text == "naive: how is auth handled?"
         assert "ragnarok: how is auth handled?" in ragnarok_text
+        assert "ZeroGPU" in backend_status
+
+    def test_passes_the_repo_slug_through_to_compare_fn(self):
+        received: dict[str, str] = {}
+
+        def fake_compare(repo_slug: str, question: str):
+            received["repo_slug"] = repo_slug
+            return _naive_result(), _ragnarok_result(), None, None
+
+        render_comparison(fake_compare, "owner/other-repo", "a question")
+
+        assert received["repo_slug"] == "owner/other-repo"
 
     @pytest.mark.parametrize("blank_question", ["", "   "])
     def test_empty_question_short_circuits_without_calling_compare_fn(self, blank_question):
-        def unreachable_compare(question: str) -> tuple[PipelineResult, PipelineResult]:
+        def unreachable_compare(repo_slug: str, question: str):
             raise AssertionError("compare_fn should not be called for an empty question")
 
-        naive_text, ragnarok_text = render_comparison(unreachable_compare, blank_question)
+        naive_text, ragnarok_text, backend_status = render_comparison(
+            unreachable_compare, "owner/repo", blank_question
+        )
 
         assert "Enter a question" in naive_text
         assert "Enter a question" in ragnarok_text
+        assert backend_status == ""
 
     def test_backend_failure_renders_a_friendly_inline_message_in_both_columns(self):
-        def failing_compare(question: str) -> tuple[PipelineResult, PipelineResult]:
+        def failing_compare(repo_slug: str, question: str):
             raise RuntimeError("model failed to load")
 
-        naive_text, ragnarok_text = render_comparison(failing_compare, "a question")
+        naive_text, ragnarok_text, backend_status = render_comparison(
+            failing_compare, "owner/repo", "a question"
+        )
 
         assert "went wrong" in naive_text
         assert "model failed to load" in naive_text
         assert "went wrong" in ragnarok_text
+        assert backend_status == ""
 
 
 class TestBuildCompareView:
     def test_returns_a_gradio_blocks_instance(self):
-        view = build_compare_view(lambda question: (_naive_result(), _ragnarok_result()))
+        def compare_fn(repo_slug: str, question: str):
+            return _naive_result(), _ragnarok_result(), None, None
+
+        view = build_compare_view(compare_fn, gr.State(value="owner/repo"))
 
         assert isinstance(view, gr.Blocks)

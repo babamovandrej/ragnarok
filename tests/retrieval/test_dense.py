@@ -16,6 +16,7 @@ def _fake_chunk(name: str) -> Chunk:
         qualified_name=name,
         symbol_type="function",
         language="python",
+        repo_sha="sha1",
         text=f"def {name}():\n    pass",
     )
 

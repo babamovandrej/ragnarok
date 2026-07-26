@@ -1,8 +1,11 @@
 name: Reindex
 
+# The daily schedule trigger is disabled: this workflow requires an HF_DATASET_REPO
+# GitHub Actions variable + HF_TOKEN secret to be configured, which this project
+# deliberately hasn't set up (the deployed Space builds its index live via the Ingest
+# tab instead — see README.md). Left as workflow_dispatch-only so it can still be run
+# manually later if the Dataset-repo persistence path ever gets configured.
 on:
-  schedule:
-    - cron: "0 6 * * *"
   workflow_dispatch:
 
 jobs:

@@ -56,6 +56,20 @@ class TestCPUBackend:
             messages=[{"role": "user", "content": "my prompt"}], max_tokens=64
         )
 
+    def test_context_window_matches_the_configured_constant(self, mock_download, mock_llama):
+        backend = CPUBackend()
+
+        assert backend.context_window == GENERATION_CONTEXT_WINDOW
+
+    def test_count_tokens_delegates_to_the_loaded_model_tokenizer(self, mock_download, mock_llama):
+        mock_llama.return_value.tokenize.return_value = [1, 2, 3, 4]
+        backend = CPUBackend()
+
+        count = backend.count_tokens("some text")
+
+        assert count == 4
+        mock_llama.return_value.tokenize.assert_called_once_with(b"some text")
+
 
 @pytest.mark.integration
 def test_real_model_generates_a_completion_for_a_fixed_prompt():

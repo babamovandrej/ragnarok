@@ -15,6 +15,7 @@ from src.config import (
     MAX_FILE_SIZE_BYTES,
     MAX_INDEXABLE_CHUNKS,
     MAX_SOURCE_BYTES,
+    MAX_WHOLE_FILE_CHARS,
     MAX_WHOLE_FILE_LINES,
     SOURCE_EXTENSIONS,
     WHOLE_FILE_LANGUAGES,
@@ -92,6 +93,18 @@ _DEFINITION_TYPES_BY_LANGUAGE: dict[SupportedLanguage, dict[str, SymbolType]] = 
     "java": _JAVA_DEFINITION_TYPES,
     "c": _C_DEFINITION_TYPES,
     "cpp": _CPP_DEFINITION_TYPES,
+}
+
+_IMPORT_NODE_TYPES_BY_LANGUAGE: dict[SupportedLanguage, frozenset[str]] = {
+    "python": frozenset({"import_statement", "import_from_statement"}),
+    "typescript": frozenset({"import_statement"}),
+    "tsx": frozenset({"import_statement"}),
+    "javascript": frozenset({"import_statement"}),
+    "go": frozenset({"import_declaration"}),
+    "rust": frozenset({"use_declaration"}),
+    "java": frozenset({"import_declaration"}),
+    "c": frozenset({"preproc_include"}),
+    "cpp": frozenset({"preproc_include"}),
 }
 
 
@@ -264,6 +277,25 @@ def _iter_definitions(
         yield from _iter_definitions(child, definition_types)
 
 
+def _collect_imports(root_node: Node, language: SupportedLanguage, source_bytes: bytes) -> str:
+    """Join the file's top-level import/include statements in document order.
+
+    A definition chunk retrieved in isolation otherwise carries no signal about which
+    module a bare name like `Request` resolves to; this text is shown in the generation
+    prompt only (see prompts.py) and deliberately excluded from Chunk.text so it never
+    reaches the embedder/reranker or dilutes retrieval-time semantic matching.
+    """
+    import_types = _IMPORT_NODE_TYPES_BY_LANGUAGE.get(language)
+    if not import_types:
+        return ""
+    import_lines = [
+        source_bytes[child.start_byte : child.end_byte].decode("utf-8")
+        for child in root_node.children
+        if child.type in import_types
+    ]
+    return "\n".join(import_lines)
+
+
 def _chunk_id(file_path: str, symbol_type: SymbolType, qualified_name: str) -> str:
     """Hash-based chunk id, stable against unrelated line changes."""
     digest_input = f"{file_path}:{symbol_type}:{qualified_name}"
@@ -278,6 +310,8 @@ def _build_chunk(
     lines: list[str],
     language: SupportedLanguage,
     file_path: str,
+    repo_sha: str,
+    imports: str,
 ) -> Chunk:
     """Build a Chunk from a matched definition node."""
     start_node = _leading_start(outer_node)
@@ -295,7 +329,9 @@ def _build_chunk(
         qualified_name=qualified_name,
         symbol_type=symbol_type,
         language=language,
+        repo_sha=repo_sha,
         text=text,
+        imports=imports,
     )
 
 
@@ -321,15 +357,22 @@ def _disambiguate_qualified_names(chunks: list[Chunk]) -> list[Chunk]:
     return disambiguated
 
 
-def _whole_file_chunk(source_text: str, language: SupportedLanguage, file_path: str) -> list[Chunk]:
-    """Chunk a whole file, splitting into bounded parts if too long."""
+def _whole_file_chunk(
+    source_text: str, language: SupportedLanguage, file_path: str, repo_sha: str
+) -> list[Chunk]:
+    """Chunk a whole file, splitting into bounded parts if too long by lines or by size.
+
+    Line-count splitting alone doesn't bound a single "line" that's unbounded in size (a
+    minified JS file, a generated single-line JSON blob) — MAX_WHOLE_FILE_CHARS re-splits
+    any such oversized line-group by raw character count as a second pass.
+    """
     lines = source_text.splitlines()
     if not lines:
         return []
 
     name = Path(file_path).name
 
-    if len(lines) <= MAX_WHOLE_FILE_LINES:
+    if len(lines) <= MAX_WHOLE_FILE_LINES and len(source_text) <= MAX_WHOLE_FILE_CHARS:
         return [
             Chunk(
                 chunk_id=_chunk_id(file_path, "file", file_path),
@@ -340,6 +383,7 @@ def _whole_file_chunk(source_text: str, language: SupportedLanguage, file_path: 
                 qualified_name=file_path,
                 symbol_type="file",
                 language=language,
+                repo_sha=repo_sha,
                 text=source_text,
             )
         ]
@@ -348,30 +392,44 @@ def _whole_file_chunk(source_text: str, language: SupportedLanguage, file_path: 
         lines[i : i + MAX_WHOLE_FILE_LINES] for i in range(0, len(lines), MAX_WHOLE_FILE_LINES)
     ]
     parts: list[Chunk] = []
-    for index, part_lines in enumerate(line_groups, start=1):
-        start_line = (index - 1) * MAX_WHOLE_FILE_LINES + 1
+    for group_index, part_lines in enumerate(line_groups):
+        start_line = group_index * MAX_WHOLE_FILE_LINES + 1
         end_line = start_line + len(part_lines) - 1
-        qualified_name = f"{file_path}#{index}"
-        parts.append(
-            Chunk(
-                chunk_id=_chunk_id(file_path, "file", qualified_name),
-                file_path=file_path,
-                start_line=start_line,
-                end_line=end_line,
-                symbol_name=name,
-                qualified_name=qualified_name,
-                symbol_type="file",
-                language=language,
-                text="\n".join(part_lines),
-            )
+        group_text = "\n".join(part_lines)
+        sub_texts = (
+            [
+                group_text[i : i + MAX_WHOLE_FILE_CHARS]
+                for i in range(0, len(group_text), MAX_WHOLE_FILE_CHARS)
+            ]
+            if len(group_text) > MAX_WHOLE_FILE_CHARS
+            else [group_text]
         )
+        for sub_text in sub_texts:
+            index = len(parts) + 1
+            qualified_name = f"{file_path}#{index}"
+            parts.append(
+                Chunk(
+                    chunk_id=_chunk_id(file_path, "file", qualified_name),
+                    file_path=file_path,
+                    start_line=start_line,
+                    end_line=end_line,
+                    symbol_name=name,
+                    qualified_name=qualified_name,
+                    symbol_type="file",
+                    language=language,
+                    repo_sha=repo_sha,
+                    text=sub_text,
+                )
+            )
     return parts
 
 
-def chunk_source(source_text: str, language: SupportedLanguage, file_path: str) -> list[Chunk]:
+def chunk_source(
+    source_text: str, language: SupportedLanguage, file_path: str, repo_sha: str
+) -> list[Chunk]:
     """Chunk one file's source text into a list of Chunks."""
     if language in WHOLE_FILE_LANGUAGES:
-        return _whole_file_chunk(source_text, language, file_path)
+        return _whole_file_chunk(source_text, language, file_path, repo_sha)
 
     definition_types = _DEFINITION_TYPES_BY_LANGUAGE.get(language)
     if definition_types is None:
@@ -382,6 +440,7 @@ def chunk_source(source_text: str, language: SupportedLanguage, file_path: str) 
     if tree.root_node.has_error:
         logger.warning("Parse errors in %s (language=%s)", file_path, language)
     lines = source_text.splitlines()
+    imports = _collect_imports(tree.root_node, language, source_bytes)
 
     chunks = [
         _build_chunk(
@@ -392,27 +451,29 @@ def chunk_source(source_text: str, language: SupportedLanguage, file_path: str) 
             lines,
             language,
             file_path,
+            repo_sha,
+            imports,
         )
         for def_node, outer_node in _iter_definitions(tree.root_node, definition_types)
     ]
 
     if not chunks:
-        return _whole_file_chunk(source_text, language, file_path)
+        return _whole_file_chunk(source_text, language, file_path, repo_sha)
 
     return _disambiguate_qualified_names(chunks)
 
 
-def chunk_file(path: Path, repo_root: Path) -> list[Chunk]:
+def chunk_file(path: Path, repo_root: Path, repo_sha: str) -> list[Chunk]:
     """Read a file from disk and chunk it based on its extension."""
     language = LANGUAGE_BY_EXTENSION.get(path.suffix)
     if language is None:
         return []
     source_text = path.read_text(encoding="utf-8")
     relative_path = path.relative_to(repo_root).as_posix()
-    return chunk_source(source_text, language, relative_path)
+    return chunk_source(source_text, language, relative_path, repo_sha)
 
 
-def collect_chunks(repo_root: Path) -> tuple[list[Chunk], IngestionStats]:
+def collect_chunks(repo_root: Path, repo_sha: str) -> tuple[list[Chunk], IngestionStats]:
     """Walk a repo and chunk every recognized source file."""
     stats = IngestionStats()
     chunks: list[Chunk] = []
@@ -439,15 +500,13 @@ def collect_chunks(repo_root: Path) -> tuple[list[Chunk], IngestionStats]:
                 continue
 
             try:
-                file_chunks = chunk_file(path, repo_root)
+                file_chunks = chunk_file(path, repo_root, repo_sha)
             except UnicodeDecodeError:
                 logger.warning("Skipping %s: invalid UTF-8", path)
                 stats.decode_failures += 1
                 stats.files_skipped += 1
                 continue
             except Exception:
-                # Deliberately broad: tree-sitter parsing across many languages and arbitrary
-                # repo content can raise almost anything; one bad file must not abort ingestion.
                 logger.warning("Skipping %s: unexpected chunking error", path, exc_info=True)
                 stats.parse_failures += 1
                 stats.files_skipped += 1
@@ -463,6 +522,7 @@ def collect_chunks(repo_root: Path) -> tuple[list[Chunk], IngestionStats]:
             if len(chunks) >= MAX_INDEXABLE_CHUNKS:
                 chunks = chunks[:MAX_INDEXABLE_CHUNKS]
                 stats.chunks_created = len(chunks)
+                stats.truncated = True
                 return chunks, stats
 
     stats.chunks_created = len(chunks)

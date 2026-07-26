@@ -7,40 +7,65 @@ from src.baseline.schemas import PipelineResult
 from src.generation.citations import Citation
 from src.ui.hop_viz import render_hop_path
 
-CompareFn = Callable[[str], tuple[PipelineResult, PipelineResult]]
 RepoContext = tuple[str, str]
+CompareFn = Callable[
+    [str, str], tuple[PipelineResult, PipelineResult, str | None, RepoContext | None]
+]
 
 _EMPTY_QUESTION_MESSAGE = "_Enter a question above, then press Ask._"
 _PROGRESS_MESSAGE = "Running naive baseline and RAGnarok pipeline (CPU inference can take a while)…"
 
+_BACKEND_STATUS_LABELS = {
+    "primary": "_Answered using the ZeroGPU-hosted model._",
+    "fallback": "_Answered using the CPU fallback model (ZeroGPU unavailable or quota exhausted)._",
+}
+
 
 def render_comparison(
     compare_fn: CompareFn,
+    repo_slug: str,
     question: str,
     *,
-    repo_context: RepoContext | None = None,
     progress: gr.Progress = gr.Progress(track_tqdm=False),
-) -> tuple[str, str]:
-    """Run compare_fn and render both pipeline results as markdown for the two UI columns.
+) -> tuple[str, str, str]:
+    """Run compare_fn against repo_slug and render both pipelines' results as markdown.
 
     Backend failures are caught and rendered as an inline error message in both columns
     rather than surfacing Gradio's generic error toast.
     """
     if not question.strip():
-        return _EMPTY_QUESTION_MESSAGE, _EMPTY_QUESTION_MESSAGE
+        return _EMPTY_QUESTION_MESSAGE, _EMPTY_QUESTION_MESSAGE, ""
 
     progress(0, desc=_PROGRESS_MESSAGE)
     try:
-        naive_result, ragnarok_result = compare_fn(question)
+        naive_result, ragnarok_result, last_backend_used, repo_context = compare_fn(
+            repo_slug, question
+        )
     except Exception as exc:
         error_message = (
             f"**Something went wrong answering this question.**\n\n`{exc}`\n\n"
             "Try again, or ask a different question."
         )
-        return error_message, error_message
+        return error_message, error_message, ""
     progress(1, desc="Done")
 
-    return _format_naive(naive_result), _format_ragnarok(ragnarok_result, repo_context)
+    return (
+        _format_naive(naive_result),
+        _format_ragnarok(ragnarok_result, repo_context),
+        _format_backend_status(last_backend_used),
+    )
+
+
+def _format_active_repo_label(repo_slug: str) -> str:
+    """Render which repo the Compare tab is currently targeting."""
+    return f"_Currently comparing against: **{repo_slug}**_"
+
+
+def _format_backend_status(last_backend_used: str | None) -> str:
+    """Render which generation backend answered the most recent question, if known."""
+    if last_backend_used is None:
+        return ""
+    return _BACKEND_STATUS_LABELS.get(last_backend_used, "")
 
 
 def _format_naive(result: PipelineResult) -> str:
@@ -77,26 +102,35 @@ def _render_citations(citations: list[Citation], repo_context: RepoContext | Non
     return "\n".join(lines)
 
 
-def build_compare_view(
-    compare_fn: CompareFn, *, repo_context: RepoContext | None = None
-) -> gr.Blocks:
-    """Build a two-column Gradio Blocks UI comparing the naive and RAGnarok pipelines."""
+def build_compare_view(compare_fn: CompareFn, active_repo_state: gr.State) -> gr.Blocks:
+    """Build a two-column Gradio Blocks UI comparing the naive and RAGnarok pipelines.
+
+    active_repo_state is shared with the Ingest tab: whichever repo was most recently
+    ingested becomes the target here too, instead of a repo fixed at app-build time.
+    """
     view: gr.Blocks
     with gr.Blocks(title="RAGnarok — naive vs. hybrid+rerank+agent") as view:
         gr.Markdown(
             "# RAGnarok\n\nCompare a naive single-vector baseline against the full "
             "hybrid+rerank+multi-hop pipeline, side by side, on the same question."
         )
+        active_repo_label = gr.Markdown(_format_active_repo_label(active_repo_state.value))
         question = gr.Textbox(
             label="Question", placeholder="e.g. How does session authentication work?"
         )
         ask_button = gr.Button("Ask", variant="primary")
+        backend_status = gr.Markdown()
         with gr.Row():
             naive_output = gr.Markdown(label="Naive baseline")
             ragnarok_output = gr.Markdown(label="RAGnarok")
+        active_repo_state.change(
+            fn=_format_active_repo_label,
+            inputs=active_repo_state,
+            outputs=active_repo_label,
+        )
         ask_button.click(
-            fn=partial(render_comparison, compare_fn, repo_context=repo_context),
-            inputs=question,
-            outputs=[naive_output, ragnarok_output],
+            fn=partial(render_comparison, compare_fn),
+            inputs=[active_repo_state, question],
+            outputs=[naive_output, ragnarok_output, backend_status],
         )
     return view

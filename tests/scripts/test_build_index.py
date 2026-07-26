@@ -256,6 +256,21 @@ class TestIncrementalIngestion:
 
         assert second.skipped
 
+    def test_rejects_incremental_update_when_embedding_model_revision_changed(
+        self, tmp_path, fake_embedder, monkeypatch
+    ):
+        repo = _init_local_repo(tmp_path / "repo")
+        cache_dir = tmp_path / "cache"
+        ingest_repository(repo_path=repo, cache_dir=cache_dir)
+
+        (repo / "a.py").write_text("def foo():\n    return 2\n")
+        _run("git", "commit", "-q", "-am", "second", cwd=repo)
+
+        monkeypatch.setattr("src.ingestion.indexer.EMBEDDING_MODEL_REVISION", "a-different-sha")
+
+        with pytest.raises(IncompatibleCacheError, match="embedding model"):
+            ingest_repository(repo_path=repo, cache_dir=cache_dir, incremental=True)
+
     def test_reindexes_only_changed_and_added_files(self, tmp_path, fake_embedder):
         repo = _init_local_repo(tmp_path / "repo")
         cache_dir = tmp_path / "cache"

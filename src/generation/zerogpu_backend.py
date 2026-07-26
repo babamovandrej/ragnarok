@@ -27,6 +27,15 @@ class ZeroGPUBackend:
         self._model = model.to("cuda")  # type: ignore[arg-type]  # transformers' AutoModel stub mistypes .to()
         logger.info("Loaded ZeroGPU generation model in %.1fs", time.monotonic() - started)
 
+    @property
+    def context_window(self) -> int:
+        """The model's own configured context window — not assumed to match CPUBackend's."""
+        return int(self._model.config.max_position_embeddings)
+
+    def count_tokens(self, text: str) -> int:
+        """Count tokens using this backend's own loaded tokenizer."""
+        return len(self._tokenizer.encode(text))
+
     @spaces.GPU
     def generate(self, prompt: str, max_tokens: int = GENERATION_MAX_TOKENS_DEFAULT) -> str:
         """Generate a completion for prompt; runs inside a ZeroGPU-allocated GPU worker."""

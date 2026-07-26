@@ -1,0 +1,6 @@
+{
+  "include": ["src", "scripts", "app.py"],
+  "exclude": ["tests", ".venv"],
+  "venvPath": ".",
+  "venv": ".venv"
+}
