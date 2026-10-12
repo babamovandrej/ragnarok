@@ -1,5 +1,19 @@
 # RAGnarok
 
+![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
+![PyTorch 2.13](https://img.shields.io/badge/PyTorch-2.13-EE4C2C?logo=pytorch&logoColor=white)
+![Transformers 4.57](https://img.shields.io/badge/Transformers-4.57-FFD21E?logo=huggingface&logoColor=black)
+![Sentence Transformers 3.4](https://img.shields.io/badge/Sentence%20Transformers-3.4-4B8BBE)
+![LangGraph 0.2](https://img.shields.io/badge/LangGraph-0.2-1C3C3C?logo=langgraph&logoColor=white)
+![Chroma 0.5](https://img.shields.io/badge/Chroma-0.5-FF6F3C)
+![bm25s 0.2](https://img.shields.io/badge/bm25s-0.2-6E56CF)
+![tree-sitter 0.23](https://img.shields.io/badge/tree--sitter-0.23-5A9E4B)
+![llama-cpp-python 0.3](https://img.shields.io/badge/llama--cpp--python-0.3-555555)
+![Gradio 5.50](https://img.shields.io/badge/Gradio-5.50-F97316?logo=gradio&logoColor=white)
+![pytest 8.4](https://img.shields.io/badge/pytest-8.4-0A9EDC?logo=pytest&logoColor=white)
+![mypy strict](https://img.shields.io/badge/mypy-strict-2A6DB2)
+![Ruff 0.15](https://img.shields.io/badge/Ruff-0.15-D7FF64?logo=ruff&logoColor=black)
+
 Ask questions about a GitHub codebase and get answers that cite the exact lines they came
 from, with every citation checked against the index. Each question is also answered by a
 naive RAG baseline (dense retrieval only), so the two can be compared side by side.
@@ -7,9 +21,9 @@ Everything runs locally on open-weight models.
 
 ## Results
 
-Measured on [Starlette](https://github.com/encode/starlette) at commit `5174d4c` (615 code
-chunks) with [35 hand-labeled questions](data/qa_starlette.jsonl): 20 single-hop, 10
-multi-hop, and 5 about features Starlette doesn't have.
+Measured on [Starlette](https://github.com/encode/starlette) (615 code chunks) with
+[35 hand-labeled questions](data/qa_starlette.jsonl): 20 single-hop, 10 multi-hop, and 5
+about features Starlette doesn't have.
 
 ### Retrieval
 
@@ -63,11 +77,10 @@ takes a few minutes.
 
 ## Run
 
-Index a repository. This one is Starlette at the commit the results above were measured on:
+Index a repository, for example Starlette:
 
 ```bash
-python -m scripts.build_index https://github.com/encode/starlette \
-    --revision 5174d4c8358a6f06aa8056bafd14c2272dab8dd1
+python -m scripts.build_index https://github.com/encode/starlette
 ```
 
 Ask a question from the command line:
@@ -84,7 +97,7 @@ by side, and its "Ingest a repo" tab indexes any public GitHub repository:
 python app.py
 ```
 
-To regenerate the results above:
+To run the retrieval benchmark and the sample answers yourself:
 
 ```bash
 python -m scripts.eval_retrieval .ragnarok_cache/encode/starlette
