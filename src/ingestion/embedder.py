@@ -5,10 +5,12 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from src.config import (
+    DEFAULT_DEVICE,
     EMBEDDING_BATCH_SIZE,
     EMBEDDING_MAX_SEQ_LENGTH,
     EMBEDDING_MODEL_ID,
     EMBEDDING_MODEL_REVISION,
+    EMBEDDING_QUERY_PROMPT,
 )
 
 logger = logging.getLogger(__name__)
@@ -19,6 +21,7 @@ class Embedder:
 
     def __init__(self, device: str | None = None, batch_size: int | None = None) -> None:
         self._batch_size = batch_size if batch_size is not None else EMBEDDING_BATCH_SIZE
+        device = device or DEFAULT_DEVICE
         logger.info(
             "Loading embedding model %s@%s (device=%s)",
             EMBEDDING_MODEL_ID,
@@ -29,7 +32,6 @@ class Embedder:
         self._model: SentenceTransformer = SentenceTransformer(
             EMBEDDING_MODEL_ID,
             revision=EMBEDDING_MODEL_REVISION,
-            trust_remote_code=True,
             device=device,
         )
         self._model.max_seq_length = EMBEDDING_MAX_SEQ_LENGTH
@@ -47,3 +49,11 @@ class Embedder:
         )
         logger.info("Embedded %d text(s) in %.1fs", len(texts), time.monotonic() - started)
         return embeddings
+
+    def embed_query(self, query: str) -> np.ndarray:
+        """Embed one search query, with the task instruction the model expects on queries."""
+        embeddings: np.ndarray = self._model.encode(
+            [query], prompt=EMBEDDING_QUERY_PROMPT, convert_to_numpy=True, show_progress_bar=False
+        )
+        query_embedding: np.ndarray = embeddings[0]
+        return query_embedding

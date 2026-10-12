@@ -274,7 +274,7 @@ def ingest_repository(
             embed_started = time.perf_counter()
             try:
                 embedder = Embedder(device=device, batch_size=embedding_batch_size)
-                embeddings = embedder.embed([chunk.text for chunk in chunks])
+                embeddings = embedder.embed([chunk.search_text for chunk in chunks])
             except Exception as exc:
                 raise EmbeddingFailedError(f"Embedding failed for {repo_slug}: {exc}") from exc
             embedding_seconds = time.perf_counter() - embed_started

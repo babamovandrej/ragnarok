@@ -10,6 +10,9 @@ from pathlib import Path
 import bm25s
 import chromadb
 import numpy as np
+from chromadb.config import Settings
+from chromadb.telemetry.product import ProductTelemetryClient, ProductTelemetryEvent
+from overrides import override
 
 from src.config import EMBEDDING_MODEL_ID, EMBEDDING_MODEL_REVISION, INDEX_SCHEMA_VERSION
 from src.ingestion.schemas import Chunk
@@ -18,6 +21,25 @@ logger = logging.getLogger(__name__)
 
 CHROMA_DIRNAME = "chroma"
 BM25_DIRNAME = "bm25"
+
+
+class NoTelemetry(ProductTelemetryClient):
+    """A Chroma telemetry client that sends nothing.
+
+    Chroma 0.5 calls posthog with an argument order that current posthog releases reject,
+    which logs an ERROR for every index operation even with anonymized_telemetry disabled.
+    Swapping the client out removes the call altogether.
+    """
+
+    @override
+    def capture(self, event: ProductTelemetryEvent) -> None:
+        return None
+
+
+_CHROMA_SETTINGS = Settings(
+    anonymized_telemetry=False,
+    chroma_product_telemetry_impl=f"{NoTelemetry.__module__}.{NoTelemetry.__qualname__}",
+)
 COLLECTION_NAME = "chunks"
 MANIFEST_FILENAME = "manifest.json"
 
@@ -99,8 +121,6 @@ def build_index(
         _write_manifest(manifest, staging_dir / MANIFEST_FILENAME)
         _swap_in_place(staging_dir, cache_dir)
     except BaseException:
-        # Deliberately BaseException: staging_dir must never be left behind, even on
-        # KeyboardInterrupt/SystemExit, so this always cleans up before re-raising.
         shutil.rmtree(staging_dir, ignore_errors=True)
         raise
 
@@ -122,8 +142,6 @@ def _swap_in_place(staging_dir: Path, cache_dir: Path) -> None:
     try:
         staging_dir.rename(cache_dir)
     except BaseException:
-        # Deliberately BaseException: cache_dir must always end up in a valid state,
-        # even on KeyboardInterrupt/SystemExit, so this always restores it before re-raising.
         if previous_dir is not None:
             previous_dir.rename(cache_dir)
         raise
@@ -148,7 +166,7 @@ def _chunk_metadata(chunk: Chunk) -> dict[str, str | int]:
 
 def _build_chroma_collection(chunks: list[Chunk], embeddings: np.ndarray, chroma_dir: Path) -> None:
     """Create a fresh Chroma collection at chroma_dir populated with the given chunks/embeddings."""
-    client = chromadb.PersistentClient(path=str(chroma_dir))
+    client = chromadb.PersistentClient(path=str(chroma_dir), settings=_CHROMA_SETTINGS)
     collection = client.create_collection(COLLECTION_NAME, metadata={"hnsw:space": "cosine"})
     collection.add(
         ids=[chunk.chunk_id for chunk in chunks],
@@ -161,7 +179,7 @@ def _build_chroma_collection(chunks: list[Chunk], embeddings: np.ndarray, chroma
 
 def _build_bm25_index(chunks: list[Chunk], bm25_dir: Path) -> None:
     """Build and persist a bm25s sparse index over chunk texts, keyed by chunk_id."""
-    corpus = [chunk.text for chunk in chunks]
+    corpus = [chunk.search_text for chunk in chunks]
     corpus_tokens = bm25s.tokenize(corpus, show_progress=False)
     retriever = bm25s.BM25()
     retriever.index(corpus_tokens, show_progress=False)
@@ -172,7 +190,9 @@ def _build_bm25_index(chunks: list[Chunk], bm25_dir: Path) -> None:
 
 def load_chroma_collection(cache_dir: Path) -> chromadb.Collection:
     """Load the persisted Chroma collection for a previously indexed repo."""
-    client = chromadb.PersistentClient(path=str(cache_dir / CHROMA_DIRNAME))
+    client = chromadb.PersistentClient(
+        path=str(cache_dir / CHROMA_DIRNAME), settings=_CHROMA_SETTINGS
+    )
     return client.get_collection(COLLECTION_NAME)
 
 

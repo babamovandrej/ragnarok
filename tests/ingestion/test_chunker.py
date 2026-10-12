@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from src.ingestion.chunker import chunk_file, chunk_source, collect_chunks
+from src.ingestion.chunker import chunk_file, chunk_source, collect_chunks, is_excluded_path
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "chunker"
 
@@ -238,7 +238,7 @@ def test_oversized_whole_file_is_split_into_bounded_parts():
 
 def test_oversized_single_line_file_is_split_by_character_count(monkeypatch):
     monkeypatch.setattr("src.ingestion.chunker.MAX_WHOLE_FILE_CHARS", 100)
-    minified = "x=1;" * 50  # one line, 200 chars — no newlines to split on at all
+    minified = "x=1;" * 50
 
     chunks = chunk_source(minified, "json", "bundle.min.json", "sha1")
 
@@ -434,3 +434,27 @@ def test_whole_file_fallback_chunk_has_no_separate_imports_field():
 
     assert chunks[0].symbol_type == "file"
     assert chunks[0].imports == ""
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    ["tests/test_app.py", "pkg/tests/conftest.py", "node_modules/x/index.js", "src/__tests__/a.ts"],
+)
+def test_paths_under_an_excluded_directory_are_excluded(relative_path):
+    assert is_excluded_path(relative_path)
+
+
+@pytest.mark.parametrize("relative_path", ["starlette/routing.py", "tests.py", "src/testing.py"])
+def test_paths_outside_excluded_directories_are_not_excluded(relative_path):
+    assert not is_excluded_path(relative_path)
+
+
+def test_collect_chunks_skips_test_directories(tmp_path):
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "core.py").write_text("def core():\n    return 1\n")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_core.py").write_text("def test_core():\n    assert True\n")
+
+    chunks, _ = collect_chunks(tmp_path, "sha1")
+
+    assert {chunk.file_path for chunk in chunks} == {"pkg/core.py"}

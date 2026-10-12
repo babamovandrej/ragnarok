@@ -21,6 +21,7 @@ class AgentState(BaseModel):
 
     question: str
     context: list[RetrievedChunk] = Field(default_factory=list)
+    hop_context: list[RetrievedChunk] = Field(default_factory=list)
     hop_path: list[HopRecord] = Field(default_factory=list)
     hops_remaining: int = AGENT_MAX_HOPS
     pending_symbol: str | None = None

@@ -240,6 +240,18 @@ class TestBuildIndex:
         assert manifest.repo_sha == "sha1"
 
 
+class TestTelemetry:
+    def test_building_and_querying_an_index_logs_no_telemetry_errors(self, tmp_path, caplog):
+        chunks = [_fake_chunk("foo"), _fake_chunk("bar")]
+        embeddings = np.array([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]], dtype=np.float32)
+
+        with caplog.at_level("ERROR"):
+            build_index(chunks, embeddings, tmp_path, repo_slug="a/b", repo_sha="sha1")
+            load_chroma_collection(tmp_path).query(query_embeddings=[[1.0, 0.0, 0.0, 0.0]])
+
+        assert "telemetry" not in caplog.text
+
+
 class TestLoadManifest:
     def test_returns_none_when_never_built(self, tmp_path):
         assert load_manifest(tmp_path) is None

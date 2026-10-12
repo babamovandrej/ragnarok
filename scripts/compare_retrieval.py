@@ -26,7 +26,7 @@ def compare_query(
 ) -> dict[str, list[str]]:
     """Run one query through the dense-only and hybrid+rerank paths against a built index."""
     collection = load_chroma_collection(cache_dir)
-    query_embedding = embedder.embed([query])[0]
+    query_embedding = embedder.embed_query(query)
     dense_only = query_dense(collection, query_embedding, top_k=top_k)
     hybrid_reranked = retrieve_hybrid(
         query, collection, cache_dir / BM25_DIRNAME, embedder, reranker, top_k=top_k

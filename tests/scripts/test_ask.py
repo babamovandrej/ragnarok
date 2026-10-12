@@ -14,6 +14,7 @@ from scripts.ask import (
 from src.config import DEFAULT_RETRIEVAL_TOP_K, GENERATION_MAX_TOKENS_DEFAULT
 from src.ingestion.indexer import build_index
 from src.ingestion.schemas import Chunk
+from src.retrieval.schemas import RetrievedChunk
 
 
 def _fake_chunk(name: str, text: str, file_path: str = "a.py") -> Chunk:
@@ -38,10 +39,29 @@ class _FakeEmbedder:
     def embed(self, texts: list[str]) -> np.ndarray:
         return np.ones((len(texts), 4), dtype=np.float32)
 
+    def embed_query(self, query: str) -> np.ndarray:
+        return self.embed([query])[0]
+
 
 class _FakeReranker:
+    def __init__(self, device: str | None = None) -> None:
+        self.device = device
+
     def rerank(self, query, candidates):
-        return candidates
+        return [RetrievedChunk(chunk=c.chunk, score=5.0) for c in candidates]
+
+
+class _RerankerWithoutAuth:
+    """Leaves `auth` out of the initial retrieval, so the agent has to hop to fetch it."""
+
+    def __init__(self, device: str | None = None) -> None:
+        self.device = device
+        self._retrieved = False
+
+    def rerank(self, query, candidates):
+        kept = [c for c in candidates if self._retrieved or c.chunk.symbol_name != "auth"]
+        self._retrieved = True
+        return [RetrievedChunk(chunk=c.chunk, score=5.0) for c in kept]
 
 
 class _FakeBackend:
@@ -60,20 +80,17 @@ class _FakeBackend:
 
 
 class _ScriptedAgentBackend:
-    """Answers agent decide-more-hops prompts from a script, and every other prompt with answer."""
+    """Answers every prompt with a fixed answer."""
 
     context_window = 100_000
 
-    def __init__(self, decisions: list[str], answer: str) -> None:
-        self._decisions = iter(decisions)
+    def __init__(self, answer: str) -> None:
         self.answer = answer
 
     def count_tokens(self, text: str) -> int:
         return len(text.split())
 
     def generate(self, prompt: str, max_tokens: int) -> str:
-        if "Reply:" in prompt:
-            return next(self._decisions, "DONE")
         return self.answer
 
 
@@ -83,7 +100,7 @@ def cache_dir(tmp_path) -> Path:
         _fake_chunk(
             "auth", "class AuthenticationMiddleware:\n    pass", "starlette/authentication.py"
         ),
-        _fake_chunk("add", "def add(a, b):\n    return a + b"),
+        _fake_chunk("add", "def add(a, b):\n    return auth(a + b)"),
     ]
     embeddings = np.array([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]], dtype=np.float32)
     build_index(chunks, embeddings, tmp_path, repo_slug="a/b", repo_sha="sha1")
@@ -120,7 +137,7 @@ class TestAnswerQuestion:
 
 class TestAnswerQuestionWithAgent:
     def test_returns_answer_citations_and_hop_path(self, cache_dir):
-        backend = _ScriptedAgentBackend(["DONE"], "starlette/authentication.py#L1-L2 handles auth.")
+        backend = _ScriptedAgentBackend("starlette/authentication.py#L1-L2 handles auth.")
 
         answer, citations, hop_path = answer_question_with_agent(
             "how is auth handled?", cache_dir, _FakeEmbedder(), _FakeReranker(), backend, top_k=2
@@ -131,10 +148,15 @@ class TestAnswerQuestionWithAgent:
         assert hop_path == []
 
     def test_records_a_resolved_hop_in_the_hop_path(self, cache_dir):
-        backend = _ScriptedAgentBackend(["auth", "DONE"], "final answer, no citations.")
+        backend = _ScriptedAgentBackend("final answer, no citations.")
 
         _, _, hop_path = answer_question_with_agent(
-            "how is auth handled?", cache_dir, _FakeEmbedder(), _FakeReranker(), backend, top_k=2
+            "how is auth handled?",
+            cache_dir,
+            _FakeEmbedder(),
+            _RerankerWithoutAuth(),
+            backend,
+            top_k=2,
         )
 
         assert [hop.symbol_name for hop in hop_path] == ["auth"]
@@ -191,10 +213,10 @@ class TestMain:
 
     def test_agent_flag_prints_the_hop_path_before_the_answer(self, cache_dir, monkeypatch, capsys):
         monkeypatch.setattr("scripts.ask.Embedder", _FakeEmbedder)
-        monkeypatch.setattr("scripts.ask.Reranker", _FakeReranker)
+        monkeypatch.setattr("scripts.ask.Reranker", _RerankerWithoutAuth)
         monkeypatch.setattr(
             "scripts.ask.CPUBackend",
-            lambda: _ScriptedAgentBackend(["auth", "DONE"], "final answer, no citations."),
+            lambda: _ScriptedAgentBackend("final answer, no citations."),
         )
 
         exit_code = main([str(cache_dir), "how is auth handled?", "--agent"])

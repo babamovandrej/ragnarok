@@ -1,10 +1,11 @@
+from src.config import GENERATION_CHAT_TEMPLATE_RESERVE_TOKENS
 from src.generation.prompts import fit_chunks_to_budget, render_prompt
 from src.ingestion.schemas import Chunk
 from src.retrieval.schemas import RetrievedChunk
 
 
 class _FakeBackend:
-    """A token counter with a small, fixed context window — real CPUBackend/ZeroGPUBackend
+    """A token counter with a small, fixed context window — the real CPUBackend
     counts real tokens, but a whitespace word-count is a good enough, fast proxy here since
     these tests only care about relative sizes, not exact tokenizer output."""
 
@@ -38,8 +39,9 @@ class TestRenderPrompt:
     def test_includes_citation_format_and_i_dont_know_instructions(self):
         prompt = render_prompt("question", [])
 
-        assert "src/foo.py#L10-L20" in prompt
-        assert "copying the exact location string" in prompt
+        assert "path/to/file.py#L10-L20" in prompt
+        assert "copied exactly" in prompt
+        assert "Example of a correctly cited answer" in prompt
         assert "I don't know" in prompt
 
     def test_includes_each_chunk_file_span_and_text(self):
@@ -105,12 +107,40 @@ class TestFitChunksToBudget:
         chunks = self._three_ranked_chunks()
         scaffold_tokens = backend.count_tokens(render_prompt(question, []))
         block_tokens = backend.count_tokens(render_prompt(question, [chunks[0]])) - scaffold_tokens
-        # Room for exactly two chunk blocks, not three.
-        backend.context_window = scaffold_tokens + 2 * block_tokens
+        backend.context_window = (
+            scaffold_tokens + 2 * block_tokens + GENERATION_CHAT_TEMPLATE_RESERVE_TOKENS
+        )
 
         fitted = fit_chunks_to_budget(question, chunks, backend, max_output_tokens=0)
 
         assert [r.chunk.symbol_name for r in fitted] == ["a", "b"]
+
+    def test_reserves_room_for_the_chat_template(self):
+        backend = _FakeBackend(context_window=0)
+        question = "q"
+        chunks = self._three_ranked_chunks()
+        scaffold_tokens = backend.count_tokens(render_prompt(question, []))
+        block_tokens = backend.count_tokens(render_prompt(question, [chunks[0]])) - scaffold_tokens
+        backend.context_window = scaffold_tokens + 2 * block_tokens
+
+        fitted = fit_chunks_to_budget(question, chunks, backend, max_output_tokens=0)
+
+        assert len(fitted) < 2
+
+    def test_skips_an_oversized_chunk_instead_of_dropping_everything_after_it(self):
+        backend = _FakeBackend(context_window=0)
+        question = "q"
+        small = self._three_ranked_chunks()
+        huge = RetrievedChunk(chunk=_fake_chunk("huge", "word " * 500), score=9.0)
+        scaffold_tokens = backend.count_tokens(render_prompt(question, []))
+        block_tokens = backend.count_tokens(render_prompt(question, [small[0]])) - scaffold_tokens
+        backend.context_window = (
+            scaffold_tokens + 3 * block_tokens + GENERATION_CHAT_TEMPLATE_RESERVE_TOKENS
+        )
+
+        fitted = fit_chunks_to_budget(question, [huge, *small], backend, max_output_tokens=0)
+
+        assert [r.chunk.symbol_name for r in fitted] == ["a", "b", "c"]
 
     def test_returns_empty_when_no_budget_remains_after_output_and_scaffold(self):
         backend = _FakeBackend(context_window=1)
@@ -126,7 +156,9 @@ class TestFitChunksToBudget:
         chunks = self._three_ranked_chunks()
         scaffold_tokens = backend.count_tokens(render_prompt(question, []))
         block_tokens = backend.count_tokens(render_prompt(question, [chunks[0]])) - scaffold_tokens
-        backend.context_window = scaffold_tokens + 2 * block_tokens
+        backend.context_window = (
+            scaffold_tokens + 2 * block_tokens + GENERATION_CHAT_TEMPLATE_RESERVE_TOKENS
+        )
 
         with caplog.at_level("WARNING"):
             fit_chunks_to_budget(question, chunks, backend, max_output_tokens=0)
@@ -141,3 +173,13 @@ class TestFitChunksToBudget:
             fit_chunks_to_budget("q", chunks, backend, max_output_tokens=512)
 
         assert "Trimmed" not in caplog.text
+
+
+class TestExampleCitation:
+    def test_example_citation_uses_the_first_context_items_real_location(self):
+        chunk = _fake_chunk("AuthenticationMiddleware", "class AuthenticationMiddleware: ...")
+
+        prompt = render_prompt("q", [RetrievedChunk(chunk=chunk, score=1.0)])
+
+        assert "(starlette/authentication.py#L10-L20)." in prompt
+        assert "path/to/file.py" not in prompt

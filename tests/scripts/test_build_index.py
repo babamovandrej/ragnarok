@@ -33,20 +33,6 @@ from src.ingestion.clone import GitCommandError, current_sha
 from src.ingestion.schemas import IngestionStats
 
 
-class _FakeEmbedder:
-    def __init__(self, device=None, batch_size=None):
-        self.device = device
-        self.batch_size = batch_size
-
-    def embed(self, texts: list[str]) -> np.ndarray:
-        return np.random.default_rng(0).random((len(texts), 4), dtype=np.float32)
-
-
-@pytest.fixture
-def fake_embedder(monkeypatch):
-    monkeypatch.setattr("scripts.build_index.Embedder", _FakeEmbedder)
-
-
 def _run(*args: str, cwd: Path) -> None:
     subprocess.run(args, cwd=cwd, check=True, capture_output=True, text=True)
 

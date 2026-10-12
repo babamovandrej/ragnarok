@@ -22,7 +22,7 @@ def chunk_from_chroma_record(chunk_id: str, text: str, metadata: Metadata) -> Ch
     conversions below are safe no-ops in practice since our own indexer only ever writes
     str/int values, narrowed here to the precise types `Chunk` declares. `imports` reads via
     `.get` with a "" default (unlike the other, schema-version-gated fields) since it's a
-    purely additive prompt-context enhancement (task 10) — an index built before it existed
+    purely additive prompt-context enhancement — an index built before it existed
     should degrade to no import context, not be rejected as incompatible.
     """
     return Chunk(

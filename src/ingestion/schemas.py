@@ -20,6 +20,20 @@ class Chunk:
     text: str
     imports: str = ""
 
+    @property
+    def search_text(self) -> str:
+        """The text embedded, keyword-indexed and reranked: a location header, then the code.
+
+        Code cut out of its file loses where it lives; the header puts the file path and
+        symbol name back so they count when matching a question against the chunk.
+        """
+        location = (
+            self.file_path
+            if self.qualified_name == self.file_path
+            else f"{self.file_path} · {self.qualified_name}"
+        )
+        return f"{location}\n{self.text}"
+
 
 @dataclass
 class IngestionStats:

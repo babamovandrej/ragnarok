@@ -108,3 +108,33 @@ class TestMergeIncrementalChunks:
 
         assert {c.file_path for c in merged_chunks} == {"a.py"}
         assert stats.chunks_created == 0
+
+    def test_changed_files_in_excluded_directories_are_not_indexed(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _run("git", "init", "-q", cwd=repo)
+        _run("git", "config", "user.email", "test@example.com", cwd=repo)
+        _run("git", "config", "user.name", "Test", cwd=repo)
+        (repo / "a.py").write_text("def foo():\n    return 1\n")
+        _run("git", "add", "-A", cwd=repo)
+        _run("git", "commit", "-q", "-m", "first", cwd=repo)
+        first_sha = current_sha(repo)
+
+        initial_chunks, _ = collect_chunks(repo, first_sha)
+        initial_embeddings = np.zeros((len(initial_chunks), 4), dtype=np.float32)
+        cache_dir = tmp_path / "cache"
+        build_index(
+            initial_chunks, initial_embeddings, cache_dir, repo_slug="a/b", repo_sha=first_sha
+        )
+
+        (repo / "tests").mkdir()
+        (repo / "tests" / "test_a.py").write_text("def test_foo():\n    assert True\n")
+        _run("git", "add", "-A", cwd=repo)
+        _run("git", "commit", "-q", "-m", "add tests", cwd=repo)
+
+        merged_chunks, _, stats = merge_incremental_chunks(
+            cache_dir, repo, first_sha, _FakeEmbedder(), current_sha(repo)
+        )
+
+        assert {c.file_path for c in merged_chunks} == {"a.py"}
+        assert stats.chunks_created == 0

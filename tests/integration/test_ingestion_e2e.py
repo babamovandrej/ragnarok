@@ -6,7 +6,13 @@ from src.ingestion.indexer import load_chroma_collection
 
 
 @pytest.mark.integration
-def test_full_ingestion_pipeline_against_starlette(tmp_path):
+def test_full_ingestion_pipeline_against_starlette(tmp_path, fake_embedder):
+    """Exercises the real wiring — clone, tree-sitter chunk, index — against a real repo.
+
+    Embedding itself is faked (see conftest.py's fake_embedder): this is a smoke test for
+    ingest_repository's plumbing, not for embedding quality — scripts/eval_retrieval.py
+    measures that against the real models.
+    """
     cache_dir = tmp_path / "starlette"
 
     result = ingest_repository(DEMO_REPO_URL, cache_dir=cache_dir)

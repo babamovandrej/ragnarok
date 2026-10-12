@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from src.baseline.naive_rag import answer_naive
+from src.config import GENERATION_CHAT_TEMPLATE_RESERVE_TOKENS, GENERATION_MAX_TOKENS_DEFAULT
 from src.ingestion.indexer import build_index
 from src.ingestion.schemas import Chunk
 
@@ -28,14 +29,23 @@ class _FakeEmbedder:
     def embed(self, texts: list[str]) -> np.ndarray:
         return np.ones((len(texts), 4), dtype=np.float32)
 
+    def embed_query(self, query: str) -> np.ndarray:
+        return self.embed([query])[0]
+
 
 class _ScriptedBackend:
-    """Answers every prompt with a fixed answer."""
+    """Answers every prompt with a fixed answer, recording the prompts it was given."""
 
-    def __init__(self, answer: str) -> None:
+    def __init__(self, answer: str, context_window: int = 100_000) -> None:
         self.answer = answer
+        self.context_window = context_window
+        self.prompts: list[str] = []
+
+    def count_tokens(self, text: str) -> int:
+        return len(text.split())
 
     def generate(self, prompt: str, max_tokens: int) -> str:
+        self.prompts.append(prompt)
         return self.answer
 
 
@@ -76,3 +86,26 @@ class TestAnswerNaive:
             "class AuthenticationMiddleware:\n    pass",
             "def add(a, b):\n    return a + b",
         }
+
+    def test_drops_context_that_would_overflow_the_models_context_window(self, cache_dir):
+        question = "how is auth handled?"
+        scaffold_tokens = len(f"Context: Question: {question} Answer:".split())
+        auth_tokens = len("class AuthenticationMiddleware: pass".split())
+        window = (
+            GENERATION_MAX_TOKENS_DEFAULT
+            + GENERATION_CHAT_TEMPLATE_RESERVE_TOKENS
+            + scaffold_tokens
+            + auth_tokens
+        )
+        backend = _ScriptedBackend("an answer", context_window=window)
+
+        result = answer_naive(question, cache_dir, _FakeEmbedder(), backend, top_k=2)
+
+        assert result.context_texts == ["class AuthenticationMiddleware:\n    pass"]
+        assert "def add" not in backend.prompts[0]
+        assert (
+            backend.count_tokens(backend.prompts[0])
+            + GENERATION_MAX_TOKENS_DEFAULT
+            + GENERATION_CHAT_TEMPLATE_RESERVE_TOKENS
+            <= window
+        )

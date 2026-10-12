@@ -4,9 +4,9 @@ import sys
 from functools import partial
 from pathlib import Path
 
-from src.agent.graph import build_graph, llm_decide_more_hops
+from src.agent.graph import build_graph, decide_next_hop
 from src.agent.state import AgentState, HopRecord
-from src.agent.tools import find_symbol_definition, retrieve_hybrid
+from src.agent.tools import RelevantReferences, find_symbol_definition, retrieve_hybrid
 from src.config import DEFAULT_RETRIEVAL_TOP_K, GENERATION_MAX_TOKENS_DEFAULT
 from src.generation.citations import Citation, verify_citations
 from src.generation.cpu_backend import CPUBackend
@@ -66,11 +66,14 @@ def answer_question_with_agent(
             top_k=top_k,
         ),
         find_symbol=partial(find_symbol_definition, collection=collection),
-        decide_more_hops=partial(llm_decide_more_hops, backend),
+        decide_more_hops=partial(
+            decide_next_hop, RelevantReferences(question, collection, reranker)
+        ),
         backend=backend,
     )
     result = graph.invoke(AgentState(question=question))
-    citations = verify_citations(result["answer"], [c.chunk for c in result["context"]])
+    context = [*result["context"], *result.get("hop_context", [])]
+    citations = verify_citations(result["answer"], [c.chunk for c in context])
     return result["answer"], citations, result.get("hop_path", [])
 
 
@@ -97,7 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Use the multi-hop LangGraph agent instead of single-hop retrieval.",
     )
     parser.add_argument(
-        "--device", choices=["cpu", "cuda", "mps"], help="Force the embedding device."
+        "--device", choices=["cpu", "cuda", "mps"], help="Force the embedding/rerank device."
     )
     return parser
 
@@ -110,7 +113,8 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("No index found at %s; run scripts/build_index.py first.", args.cache_dir)
         return EXIT_INVALID_ARGUMENT
 
-    embedder, reranker, backend = Embedder(device=args.device), Reranker(), CPUBackend()
+    embedder, reranker = Embedder(device=args.device), Reranker(device=args.device)
+    backend = CPUBackend()
     hop_path: list[HopRecord] = []
     if args.agent:
         answer, citations, hop_path = answer_question_with_agent(

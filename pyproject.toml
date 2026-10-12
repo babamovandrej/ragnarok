@@ -14,19 +14,12 @@ dependencies = [
     "chromadb==0.5.20",
     "gradio==5.50.0",
     "huggingface_hub==0.36.2",
-    "langchain-core==0.3.86",
     "langgraph==0.2.76",
-    # PEP 621's [project.dependencies] has no per-package index-URL field, so this alone
-    # (e.g. `pip install -e .`) resolves llama_cpp_python from PyPI's source distribution,
-    # not the prebuilt CPU wheel — always also install from requirements.txt (which carries
-    # the --extra-index-url) on Linux/HF Spaces; see README.md's Local development section.
     "llama_cpp_python==0.3.16",
     "numpy==2.4.6",
-    "pyarrow==25.0.0",
+    "overrides==7.7.0",
     "pydantic==2.12.3",
-    "ragas==0.2.15",
     "sentence-transformers==3.4.1",
-    "spaces==0.51.0",
     "torch==2.13.0",
     "transformers==4.57.6",
     "tree-sitter==0.23.2",
@@ -67,14 +60,8 @@ explicit_package_bases = true
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["ragas.*", "spaces", "bm25s", "pyarrow", "pyarrow.*"]
+module = ["bm25s"]
 ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "src.generation.zerogpu_backend"
-disallow_untyped_calls = false
-disallow_untyped_decorators = false
-warn_return_any = false
 
 [tool.coverage.run]
 source = ["src", "scripts", "app"]

@@ -463,6 +463,12 @@ def chunk_source(
     return _disambiguate_qualified_names(chunks)
 
 
+def is_excluded_path(relative_path: str) -> bool:
+    """True if any directory on relative_path is in EXCLUDED_DIRECTORY_NAMES."""
+    directories = relative_path.split("/")[:-1]
+    return any(directory in EXCLUDED_DIRECTORY_NAMES for directory in directories)
+
+
 def chunk_file(path: Path, repo_root: Path, repo_sha: str) -> list[Chunk]:
     """Read a file from disk and chunk it based on its extension."""
     language = LANGUAGE_BY_EXTENSION.get(path.suffix)

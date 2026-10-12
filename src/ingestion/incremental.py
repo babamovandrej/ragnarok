@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 from chromadb.api.types import IncludeEnum
 
-from src.ingestion.chunker import chunk_file
+from src.ingestion.chunker import chunk_file, is_excluded_path
 from src.ingestion.clone import changed_files_since
 from src.ingestion.embedder import Embedder
 from src.ingestion.indexer import load_chroma_collection
@@ -42,11 +42,13 @@ def merge_incremental_chunks(
 
     new_chunks: list[Chunk] = []
     for changed_file in changed:
-        if changed_file.status.startswith("D"):
+        if changed_file.status.startswith("D") or is_excluded_path(changed_file.path):
             continue
         new_chunks.extend(chunk_file(repo_dir / changed_file.path, repo_dir, new_sha))
 
-    new_embeddings = embedder.embed([chunk.text for chunk in new_chunks]) if new_chunks else None
+    new_embeddings = (
+        embedder.embed([chunk.search_text for chunk in new_chunks]) if new_chunks else None
+    )
 
     all_chunks = kept_chunks + new_chunks
     if kept_embeddings and new_embeddings is not None:

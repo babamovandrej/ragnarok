@@ -2,9 +2,9 @@ import logging
 from functools import partial
 from pathlib import Path
 
-from src.agent.graph import build_graph, llm_decide_more_hops
+from src.agent.graph import build_graph, decide_next_hop
 from src.agent.state import AgentState
-from src.agent.tools import find_symbol_definition, retrieve_hybrid
+from src.agent.tools import RelevantReferences, find_symbol_definition, retrieve_hybrid
 from src.baseline.naive_rag import answer_naive
 from src.baseline.schemas import PipelineResult
 from src.config import AGENT_MAX_HOPS, DEFAULT_RETRIEVAL_TOP_K
@@ -39,7 +39,9 @@ def answer_ragnarok(
             top_k=top_k,
         ),
         find_symbol=partial(find_symbol_definition, collection=collection),
-        decide_more_hops=partial(llm_decide_more_hops, backend),
+        decide_more_hops=partial(
+            decide_next_hop, RelevantReferences(question, collection, reranker)
+        ),
         backend=backend,
     )
     try:
@@ -47,7 +49,8 @@ def answer_ragnarok(
     except Exception:
         logger.exception("RAGnarok pipeline failed to generate an answer for %r", question)
         raise
-    citations = verify_citations(result["answer"], [c.chunk for c in result["context"]])
+    context = [*result["context"], *result.get("hop_context", [])]
+    citations = verify_citations(result["answer"], [c.chunk for c in context])
     hop_path = result.get("hop_path", [])
     logger.info("RAGnarok pipeline answered with %d hop(s)", len(hop_path))
     return PipelineResult(
@@ -55,7 +58,7 @@ def answer_ragnarok(
         answer=result["answer"],
         citations=citations,
         hop_path=hop_path,
-        context_texts=[c.chunk.text for c in result["context"]],
+        context_texts=[c.chunk.text for c in context],
     )
 
 

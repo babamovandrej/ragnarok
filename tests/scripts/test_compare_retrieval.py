@@ -35,6 +35,9 @@ class _FakeEmbedder:
     def embed(self, texts: list[str]) -> np.ndarray:
         return np.ones((len(texts), 4), dtype=np.float32)
 
+    def embed_query(self, query: str) -> np.ndarray:
+        return self.embed([query])[0]
+
 
 class _FakeReranker:
     def rerank(self, query, candidates):

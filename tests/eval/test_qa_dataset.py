@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from src.eval.qa_dataset import QAItem, load_qa_dataset
 
-QA_PATH = Path(__file__).parent.parent.parent / "data" / "eval" / "qa_starlette.jsonl"
+QA_PATH = Path(__file__).parent.parent.parent / "data" / "qa_starlette.jsonl"
 
 
 class TestQAItem:

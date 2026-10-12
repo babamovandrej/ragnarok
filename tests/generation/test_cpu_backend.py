@@ -53,7 +53,7 @@ class TestCPUBackend:
 
         assert result == "the answer"
         mock_llama.return_value.create_chat_completion.assert_called_once_with(
-            messages=[{"role": "user", "content": "my prompt"}], max_tokens=64
+            messages=[{"role": "user", "content": "my prompt"}], max_tokens=64, temperature=0.0
         )
 
     def test_context_window_matches_the_configured_constant(self, mock_download, mock_llama):

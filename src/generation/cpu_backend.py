@@ -11,6 +11,7 @@ from src.config import (
     GENERATION_MODEL_FILENAME,
     GENERATION_MODEL_REPO,
     GENERATION_MODEL_REVISION,
+    GENERATION_TEMPERATURE,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,12 +47,17 @@ class CPUBackend:
         return len(self._model.tokenize(text.encode("utf-8")))
 
     def generate(self, prompt: str, max_tokens: int = GENERATION_MAX_TOKENS_DEFAULT) -> str:
-        """Generate a chat completion for prompt, capped at max_tokens output tokens."""
+        """Generate a chat completion for prompt, capped at max_tokens output tokens.
+
+        Decoding is greedy (temperature 0), which removes sampling randomness. Wording can
+        still vary slightly between runs through floating-point effects.
+        """
         response = cast(
             CreateChatCompletionResponse,
             self._model.create_chat_completion(
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens,
+                temperature=GENERATION_TEMPERATURE,
             ),
         )
         content = response["choices"][0]["message"]["content"]

@@ -1,4 +1,4 @@
-from src.agent.graph import HopDecision, build_graph, llm_decide_more_hops
+from src.agent.graph import NO_CANDIDATES_REASON, HopDecision, build_graph, decide_next_hop
 from src.agent.state import AgentState
 from src.config import AGENT_MAX_HOPS
 from src.ingestion.schemas import Chunk
@@ -74,8 +74,8 @@ class TestBuildGraph:
             "AuthenticationMiddleware",
             "authenticate",
         ]
-        assert [c.chunk.symbol_name for c in result["context"]] == [
-            "Router",
+        assert [c.chunk.symbol_name for c in result["context"]] == ["Router"]
+        assert [c.chunk.symbol_name for c in result["hop_context"]] == [
             "AuthenticationMiddleware",
             "authenticate",
         ]
@@ -99,14 +99,16 @@ class TestBuildGraph:
 
     def test_stops_after_max_hops_even_if_the_decider_keeps_requesting_more(self):
         initial = RetrievedChunk(chunk=_fake_chunk("Router", "starlette/routing.py"), score=1.0)
-        found = RetrievedChunk(
-            chunk=_fake_chunk("Middleware", "starlette/middleware.py"), score=1.0
-        )
+        symbols = [f"Symbol{i}" for i in range(AGENT_MAX_HOPS + 5)]
+        definitions = {
+            name: RetrievedChunk(chunk=_fake_chunk(name, f"{name}.py"), score=1.0)
+            for name in symbols
+        }
 
         graph = build_graph(
             retrieve=lambda question: [initial],
-            find_symbol=_find_symbol({"Middleware": found}),
-            decide_more_hops=_StubDecider(["Middleware"] * (AGENT_MAX_HOPS + 5)),
+            find_symbol=_find_symbol(definitions),
+            decide_more_hops=_StubDecider(list(symbols)),
             backend=_FakeBackend(),
         )
 
@@ -114,6 +116,22 @@ class TestBuildGraph:
 
         assert len(result["hop_path"]) == AGENT_MAX_HOPS
         assert result["hops_remaining"] == 0
+
+    def test_stops_when_the_requested_definition_is_already_in_context(self):
+        initial = RetrievedChunk(chunk=_fake_chunk("Router", "starlette/routing.py"), score=1.0)
+        decider = _StubDecider(["Router", "Router", "Router"])
+
+        graph = build_graph(
+            retrieve=lambda question: [initial],
+            find_symbol=_find_symbol({"Router": initial}),
+            decide_more_hops=decider,
+            backend=_FakeBackend(),
+        )
+
+        result = graph.invoke(AgentState(question="what is Router?"))
+
+        assert result.get("hop_path", []) == []
+        assert result.get("hop_context", []) == []
 
     def test_stops_when_a_requested_symbol_cannot_be_resolved(self):
         initial = RetrievedChunk(chunk=_fake_chunk("Router", "starlette/routing.py"), score=1.0)
@@ -166,8 +184,6 @@ class TestHopDecisionObservability:
         unresolved_graph = build_graph(
             retrieve=lambda question: [initial],
             find_symbol=_find_symbol({}),
-            # Never yields None/DONE: every attempt is an unresolved guess, so the loop only
-            # ends by exhausting hops_remaining, never by the decider intentionally stopping.
             decide_more_hops=_StubDecider(["MissingSymbol"] * AGENT_MAX_HOPS),
             backend=_FakeBackend(),
         )
@@ -181,10 +197,10 @@ class TestHopDecisionObservability:
             unresolved_graph.invoke(AgentState(question="trace it"))
             unresolved_log = caplog.text
 
-        assert "chose DONE" in done_log
+        assert "No further hop" in done_log
         assert "Could not resolve symbol" not in done_log
         assert "Could not resolve symbol" in unresolved_log
-        assert "chose DONE" not in unresolved_log
+        assert "No further hop" not in unresolved_log
 
 
 class _RecordingBackend:
@@ -226,6 +242,31 @@ class TestComposeAnswerContextBudget:
         assert "file0.py" in prompt
         assert "file9.py" not in prompt
 
+    def test_keeps_hopped_definitions_over_low_ranked_retrieval_results(self):
+        big_text = "word " * 200
+        ranked_chunks = [
+            RetrievedChunk(
+                chunk=_fake_chunk(f"chunk{i}", f"file{i}.py", big_text), score=float(10 - i)
+            )
+            for i in range(10)
+        ]
+        hopped = RetrievedChunk(chunk=_fake_chunk("Target", "target.py", big_text), score=1.0)
+        backend = _RecordingBackend(context_window=1100)
+
+        graph = build_graph(
+            retrieve=lambda question: ranked_chunks,
+            find_symbol=_find_symbol({"Target": hopped}),
+            decide_more_hops=_StubDecider(["Target", None]),
+            backend=backend,
+        )
+
+        graph.invoke(AgentState(question="q"))
+
+        prompt = backend.prompts[-1]
+        assert "file0.py" in prompt
+        assert "target.py" in prompt
+        assert "file1.py" not in prompt
+
 
 class TestComposeAnswerRelevanceGuardrail:
     def test_short_circuits_when_all_context_scores_are_below_threshold(self):
@@ -242,6 +283,24 @@ class TestComposeAnswerRelevanceGuardrail:
         result = graph.invoke(AgentState(question="what color is the sky on mars?"))
 
         assert "doesn't appear to be covered" in result["answer"]
+        assert backend.prompts == []
+
+    def test_a_hop_does_not_bypass_the_threshold(self):
+        irrelevant = RetrievedChunk(chunk=_fake_chunk("Unrelated", "other/file.py"), score=-5.0)
+        looked_up = RetrievedChunk(chunk=_fake_chunk("Mars", "mars.py"), score=1.0)
+        backend = _RecordingBackend(context_window=100_000)
+
+        graph = build_graph(
+            retrieve=lambda question: [irrelevant],
+            find_symbol=_find_symbol({"Mars": looked_up}),
+            decide_more_hops=_StubDecider(["Mars", None]),
+            backend=backend,
+        )
+
+        result = graph.invoke(AgentState(question="what color is the sky on mars?"))
+
+        assert "doesn't appear to be covered" in result["answer"]
+        assert result.get("hop_path", []) == []
         assert backend.prompts == []
 
     def test_short_circuits_when_there_is_no_context_at_all(self):
@@ -318,59 +377,99 @@ class TestFollowSymbolNodeErrorHandling:
         assert "Symbol lookup failed" in caplog.text
 
 
-class _CannedBackend:
-    def __init__(self, reply: str) -> None:
-        self.reply = reply
-        self.calls: list[tuple[str, int]] = []
-
-    def generate(self, prompt: str, max_tokens: int) -> str:
-        self.calls.append((prompt, max_tokens))
-        return self.reply
-
-
-class TestLLMDecideMoreHops:
-    def test_a_done_reply_means_stop_hopping(self):
+class TestDecideNextHop:
+    def test_picks_the_most_relevant_candidate_and_reports_its_score(self):
+        best = RetrievedChunk(chunk=_fake_chunk("RedirectResponse", "responses.py"), score=3.24)
+        other = RetrievedChunk(chunk=_fake_chunk("HTTPException", "exceptions.py"), score=1.5)
         state = AgentState(question="q", context=[])
 
-        assert llm_decide_more_hops(_CannedBackend("DONE"), state).symbol is None
+        decision = decide_next_hop(lambda retrieved: [best, other], state)
 
-    def test_a_bare_symbol_reply_is_returned_as_the_next_hop(self):
-        """A reply that ignores the requested SYMBOL:/REASON: format still resolves (fallback)."""
+        assert decision.symbol == "RedirectResponse"
+        assert "3.2" in decision.reason
+
+    def test_stops_when_nothing_relevant_is_left_to_fetch(self):
         state = AgentState(question="q", context=[])
 
-        decision = llm_decide_more_hops(_CannedBackend("AuthenticationMiddleware"), state)
+        decision = decide_next_hop(lambda retrieved: [], state)
 
-        assert decision.symbol == "AuthenticationMiddleware"
+        assert decision == HopDecision(symbol=None, reason=NO_CANDIDATES_REASON)
 
-    def test_a_well_formed_reply_returns_both_symbol_and_reason(self):
-        state = AgentState(question="q", context=[])
-        reply = "SYMBOL: AuthenticationMiddleware\nREASON: it authenticates the request"
+    def test_candidates_are_drawn_from_retrieved_and_hopped_chunks(self):
+        retrieved = RetrievedChunk(chunk=_fake_chunk("Router", "routing.py"), score=1.0)
+        hopped = RetrievedChunk(chunk=_fake_chunk("Mount", "routing.py"), score=1.0)
+        state = AgentState(question="q", context=[retrieved], hop_context=[hopped])
+        seen: list[list[str]] = []
 
-        decision = llm_decide_more_hops(_CannedBackend(reply), state)
+        def list_candidates(chunks):
+            seen.append([c.chunk.symbol_name for c in chunks])
+            return []
 
-        assert decision.symbol == "AuthenticationMiddleware"
-        assert decision.reason == "it authenticates the request"
+        decide_next_hop(list_candidates, state)
 
-    def test_a_well_formed_done_reply_carries_its_reason(self):
-        state = AgentState(question="q", context=[])
-        reply = "SYMBOL: DONE\nREASON: context already answers the question"
+        assert seen == [["Router", "Mount"]]
 
-        decision = llm_decide_more_hops(_CannedBackend(reply), state)
 
-        assert decision.symbol is None
-        assert decision.reason == "context already answers the question"
+class TestDecideNodeErrorHandling:
+    def test_a_failing_hop_decision_degrades_to_answering_without_hops(self, caplog):
+        initial = RetrievedChunk(chunk=_fake_chunk("Router", "starlette/routing.py"), score=1.0)
 
-    def test_prompt_includes_the_question_and_context_so_far(self):
-        chunk = _fake_chunk("Router", "starlette/routing.py")
-        state = AgentState(
-            question="how is auth validated?",
-            context=[RetrievedChunk(chunk=chunk, score=1.0)],
+        def failing_decider(state: AgentState) -> HopDecision:
+            raise RuntimeError("index unavailable")
+
+        graph = build_graph(
+            retrieve=lambda question: [initial],
+            find_symbol=_find_symbol({}),
+            decide_more_hops=failing_decider,
+            backend=_FakeBackend(),
         )
-        backend = _CannedBackend("DONE")
 
-        llm_decide_more_hops(backend, state)
+        with caplog.at_level("ERROR"):
+            result = graph.invoke(AgentState(question="q"))
 
-        prompt = backend.calls[0][0]
-        assert "how is auth validated?" in prompt
-        assert "Router" in prompt
-        assert "starlette/routing.py" in prompt
+        assert result["answer"] == "the answer"
+        assert result.get("hop_path", []) == []
+        assert "Hop decision failed" in caplog.text
+
+
+class _CountingDecider(_StubDecider):
+    def __init__(self, symbols: list[str | None]) -> None:
+        super().__init__(symbols)
+        self.calls = 0
+
+    def __call__(self, state: AgentState) -> HopDecision:
+        self.calls += 1
+        return super().__call__(state)
+
+
+class TestHopStopping:
+    def test_an_unresolvable_symbol_ends_hopping_without_asking_again(self):
+        initial = RetrievedChunk(chunk=_fake_chunk("Router", "starlette/routing.py"), score=1.0)
+        decider = _CountingDecider(["Missing", "Missing", "Missing"])
+
+        graph = build_graph(
+            retrieve=lambda question: [initial],
+            find_symbol=_find_symbol({}),
+            decide_more_hops=decider,
+            backend=_FakeBackend(),
+        )
+
+        result = graph.invoke(AgentState(question="q"))
+
+        assert decider.calls == 1
+        assert result["answer"] == "the answer"
+
+    def test_a_symbol_already_in_context_ends_hopping_without_asking_again(self):
+        initial = RetrievedChunk(chunk=_fake_chunk("Router", "starlette/routing.py"), score=1.0)
+        decider = _CountingDecider(["Router", "Router", "Router"])
+
+        graph = build_graph(
+            retrieve=lambda question: [initial],
+            find_symbol=_find_symbol({"Router": initial}),
+            decide_more_hops=decider,
+            backend=_FakeBackend(),
+        )
+
+        graph.invoke(AgentState(question="q"))
+
+        assert decider.calls == 1

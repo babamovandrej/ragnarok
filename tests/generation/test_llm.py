@@ -1,31 +1,24 @@
-from src.generation.llm import LLMBackend
+from src.generation.llm import GenerationBackend
 
 
 class _MockBackend:
-    def __init__(self, response: str = "mock answer") -> None:
-        self.response = response
-        self.calls: list[tuple[str, int]] = []
+    context_window = 4096
+
+    def count_tokens(self, text: str) -> int:
+        return len(text.split())
 
     def generate(self, prompt: str, max_tokens: int) -> str:
-        self.calls.append((prompt, max_tokens))
-        return self.response
+        return "mock answer"
 
 
-class _NotABackend:
-    pass
+class _GenerateOnly:
+    def generate(self, prompt: str, max_tokens: int) -> str:
+        return "mock answer"
 
 
-class TestLLMBackendProtocol:
-    def test_a_class_implementing_generate_satisfies_the_protocol(self):
-        assert isinstance(_MockBackend(), LLMBackend)
+class TestGenerationBackendProtocol:
+    def test_a_class_with_generate_context_window_and_count_tokens_satisfies_it(self):
+        assert isinstance(_MockBackend(), GenerationBackend)
 
-    def test_a_class_without_generate_does_not_satisfy_the_protocol(self):
-        assert isinstance(_NotABackend(), LLMBackend) is False
-
-    def test_generate_receives_the_prompt_and_max_tokens_and_returns_a_string(self):
-        backend = _MockBackend("the answer")
-
-        result = backend.generate("my prompt", max_tokens=64)
-
-        assert result == "the answer"
-        assert backend.calls == [("my prompt", 64)]
+    def test_a_class_that_can_only_generate_does_not_satisfy_it(self):
+        assert isinstance(_GenerateOnly(), GenerationBackend) is False

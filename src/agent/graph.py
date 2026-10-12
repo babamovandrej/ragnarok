@@ -6,23 +6,20 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from src.agent.state import AgentState, HopRecord
-from src.config import (
-    AGENT_HOP_DECISION_MAX_TOKENS,
-    GENERATION_MAX_TOKENS_DEFAULT,
-    MIN_CONTEXT_RELEVANCE_SCORE,
-)
-from src.generation.llm import GenerationBackend, LLMBackend
+from src.config import GENERATION_MAX_TOKENS_DEFAULT, MIN_CONTEXT_RELEVANCE_SCORE
+from src.generation.llm import GenerationBackend
 from src.generation.prompts import NOT_IN_REPO_ANSWER, fit_chunks_to_budget, render_prompt
 from src.retrieval.schemas import RetrievedChunk
 
 logger = logging.getLogger(__name__)
 
 RetrieveFn = Callable[[str], list[RetrievedChunk]]
+CandidatesFn = Callable[[list[RetrievedChunk]], list[RetrievedChunk]]
 FindSymbolFn = Callable[[str], RetrievedChunk | None]
 
 
 class HopDecision(NamedTuple):
-    """A parsed hop-decision reply: the symbol to follow (None means stop), and why."""
+    """The next hop: the symbol whose definition to fetch (None means stop), and why."""
 
     symbol: str | None
     reason: str
@@ -35,6 +32,7 @@ class _AgentStateUpdate(TypedDict, total=False):
     """Partial update applied to `AgentState` after a graph node runs."""
 
     context: list[RetrievedChunk]
+    hop_context: list[RetrievedChunk]
     hop_path: list[HopRecord]
     pending_symbol: str | None
     pending_reason: str | None
@@ -42,51 +40,40 @@ class _AgentStateUpdate(TypedDict, total=False):
     answer: str
 
 
-_SYMBOL_LINE_PREFIX = "symbol:"
-_REASON_LINE_PREFIX = "reason:"
-
-DECIDE_MORE_HOPS_PROMPT = (
-    "You are deciding whether one more symbol lookup would help answer the question, "
-    "given the context already retrieved. Reply on exactly two lines:\n"
-    "SYMBOL: <the symbol name to look up, or DONE if the context is already sufficient>\n"
-    "REASON: <one short sentence explaining why>\n\n"
-    "Question: {question}\n\nContext so far:\n{context}\n\nReply:"
-)
+NO_CANDIDATES_REASON = "the retrieved code refers to no other relevant definitions"
 
 
-def _parse_hop_decision(reply: str) -> HopDecision:
-    """Parse a SYMBOL:/REASON: reply; tolerates a model that ignores the requested format."""
-    symbol_text = ""
-    reason_text = ""
-    for line in reply.strip().splitlines():
-        stripped = line.strip()
-        lowered = stripped.lower()
-        if lowered.startswith(_SYMBOL_LINE_PREFIX):
-            symbol_text = stripped[len(_SYMBOL_LINE_PREFIX) :].strip()
-        elif lowered.startswith(_REASON_LINE_PREFIX):
-            reason_text = stripped[len(_REASON_LINE_PREFIX) :].strip()
-
-    if not symbol_text and not reason_text:
-        # The model ignored the two-line format; fall back to treating the whole reply as a
-        # bare symbol guess, matching this function's pre-task-11 behavior.
-        symbol_text = reply.strip()
-
-    if not symbol_text or symbol_text.upper() == "DONE":
-        return HopDecision(
-            symbol=None, reason=reason_text or "model indicated no further hop is needed"
-        )
-    return HopDecision(symbol=symbol_text, reason=reason_text or "no reason given")
+def _best_retrieval_score(state: AgentState) -> float:
+    return max((c.score for c in state.context), default=float("-inf"))
 
 
-def llm_decide_more_hops(backend: LLMBackend, state: AgentState) -> HopDecision:
-    """Ask backend whether another symbol lookup would help; symbol=None means stop hopping."""
-    context = "\n".join(f"- {c.chunk.qualified_name} ({c.chunk.file_path})" for c in state.context)
-    prompt = DECIDE_MORE_HOPS_PROMPT.format(question=state.question, context=context)
-    reply = backend.generate(prompt, max_tokens=AGENT_HOP_DECISION_MAX_TOKENS)
-    decision = _parse_hop_decision(reply)
-    logger.debug("Hop decision prompt: %s", prompt)
-    logger.debug("Hop decision raw reply: %r -> %r", reply, decision)
-    return decision
+def _prompt_context(state: AgentState) -> list[RetrievedChunk]:
+    """Order context by priority for fit_chunks_to_budget, which trims from the tail.
+
+    The top retrieved chunk comes first, then every chunk the agent deliberately hopped
+    to, then the remaining retrieved chunks — so trimming drops low-ranked retrieval
+    results before it drops the definitions the agent went looking for.
+    """
+    return [*state.context[:1], *state.hop_context, *state.context[1:]]
+
+
+def decide_next_hop(list_candidates: CandidatesFn, state: AgentState) -> HopDecision:
+    """Pick the next definition to fetch: the most relevant one the context refers to.
+
+    list_candidates returns the definitions the context's code refers to that are relevant
+    to the question, best first, each scored by the reranker. The choice is deliberately not
+    left to the generation model: asked to choose, a 3B model took every hop it was offered
+    and at times named none legibly, while the reranker's scores separate useful definitions
+    from incidental ones.
+    """
+    candidates = list_candidates(_prompt_context(state))
+    if not candidates:
+        return HopDecision(symbol=None, reason=NO_CANDIDATES_REASON)
+    best = candidates[0]
+    return HopDecision(
+        symbol=best.chunk.symbol_name,
+        reason=f"The retrieved code refers to it, and it scored {best.score:.1f} for relevance",
+    )
 
 
 def build_graph(
@@ -110,11 +97,18 @@ def build_graph(
 
     def decide_more_hops_node(state: AgentState) -> _AgentStateUpdate:
         if state.hops_remaining <= 0:
-            logger.info("No hops remaining; stopping without asking the model")
+            logger.info("No hops remaining")
             return {"pending_symbol": None, "pending_reason": None}
-        decision = decide_more_hops(state)
+        if _best_retrieval_score(state) < MIN_CONTEXT_RELEVANCE_SCORE:
+            logger.info("Nothing relevant retrieved; skipping hops")
+            return {"pending_symbol": None, "pending_reason": None}
+        try:
+            decision = decide_more_hops(state)
+        except Exception:
+            logger.exception("Hop decision failed; continuing without further hops")
+            return {"pending_symbol": None, "pending_reason": None}
         if decision.symbol is None:
-            logger.info("Hop decision: model chose DONE (%s)", decision.reason)
+            logger.info("No further hop: %s", decision.reason)
         return {"pending_symbol": decision.symbol, "pending_reason": decision.reason}
 
     def route_after_decision(state: AgentState) -> str:
@@ -123,18 +117,23 @@ def build_graph(
     def follow_symbol_node(state: AgentState) -> _AgentStateUpdate:
         symbol = state.pending_symbol
         assert symbol is not None, "follow_symbol_node reached without a pending symbol"
+        stop: _AgentStateUpdate = {
+            "pending_symbol": None,
+            "pending_reason": None,
+            "hops_remaining": 0,
+        }
         try:
             found = find_symbol(symbol)
         except Exception:
             logger.exception("Symbol lookup failed for %r; stopping hops", symbol)
-            found = None
+            return stop
         if found is None:
             logger.info("Could not resolve symbol %s; stopping hops", symbol)
-            return {
-                "pending_symbol": None,
-                "pending_reason": None,
-                "hops_remaining": state.hops_remaining - 1,
-            }
+            return stop
+        known_ids = {c.chunk.chunk_id for c in [*state.context, *state.hop_context]}
+        if found.chunk.chunk_id in known_ids:
+            logger.info("Definition of %s is already in context; stopping hops", symbol)
+            return stop
         hop = HopRecord(
             file_path=found.chunk.file_path,
             symbol_name=found.chunk.symbol_name,
@@ -143,7 +142,7 @@ def build_graph(
             reason=state.pending_reason or f"Followed reference to {symbol}",
         )
         return {
-            "context": [*state.context, found],
+            "hop_context": [*state.hop_context, found],
             "hop_path": [*state.hop_path, hop],
             "pending_symbol": None,
             "pending_reason": None,
@@ -151,7 +150,7 @@ def build_graph(
         }
 
     def compose_answer_node(state: AgentState) -> _AgentStateUpdate:
-        best_score = max((c.score for c in state.context), default=float("-inf"))
+        best_score = _best_retrieval_score(state)
         if best_score < MIN_CONTEXT_RELEVANCE_SCORE:
             logger.info(
                 "Best context score %.3f is below the relevance threshold %.3f; answering "
@@ -162,7 +161,7 @@ def build_graph(
             return {"answer": NOT_IN_REPO_ANSWER}
 
         fitted_context = fit_chunks_to_budget(
-            state.question, state.context, backend, GENERATION_MAX_TOKENS_DEFAULT
+            state.question, _prompt_context(state), backend, GENERATION_MAX_TOKENS_DEFAULT
         )
         prompt = render_prompt(state.question, fitted_context)
         answer = backend.generate(prompt, max_tokens=GENERATION_MAX_TOKENS_DEFAULT)
